@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Подготовка к собесам</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap">
+<style>
+:root {
+  --bg: #F2F4F8;
+  --surface: #FFFFFF;
+  --ink: #131A25;
+  --muted: #586476;
+  --line: #D8DEE8;
+  --accent: #2350C8;
+  --accent-soft: #E2E9FA;
+  --shadow: 0 1px 2px rgba(19, 26, 37, .06), 0 4px 14px rgba(19, 26, 37, .05);
+  --f-display: "Unbounded", "Inter", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0D1219;
+    --surface: #151C26;
+    --ink: #E4E9F0;
+    --muted: #96A2B3;
+    --line: #293341;
+    --accent: #84A4FF;
+    --accent-soft: #1D2944;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 var(--f-body);
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+}
+main { width: 100%; max-width: 760px; }
+h1 { font: 700 clamp(26px, 5vw, 36px)/1.15 var(--f-display); margin: 0 0 8px; }
+h1 span { color: var(--accent); }
+.lead { color: var(--muted); margin: 0 0 32px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .15s, transform .15s;
+}
+.tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+.tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.tag {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.tile h2 { font: 700 20px/1.25 var(--f-display); margin: 0; }
+.tile p { margin: 0; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile:hover { transform: none; } }
+</style>
+<main>
+  <h1>Подготовка <span>к собесам</span></h1>
+  <p class="lead">Фуллстек: сначала разобраться в теме, потом проверить, что ответ отскакивает от зубов.</p>
+  <div class="grid">
+    <a class="tile" href="samouchitel.html">
+      <span class="tag">Учебник · 39 глав</span>
+      <h2>Самоучитель фуллстека</h2>
+      <p>Теория с нуля: базы данных, бэкенд, JS, CS, фронтенд, C++ и Qt. Аналогии, разбор кода и вопросы для самопроверки.</p>
+    </a>
+    <a class="tile" href="otzubov.html">
+      <span class="tag">Шпаргалка · 295 карточек</span>
+      <h2>Отскакивает от зубов</h2>
+      <p>Короткие ответы на 30 секунд, ловушки и уточняющие вопросы. Есть поиск и режим самопроверки.</p>
+    </a>
+  </div>
+</main>
