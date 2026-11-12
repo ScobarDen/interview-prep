@@ -3,6 +3,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#2350C8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 <title>Самоучитель фуллстека</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -584,7 +589,7 @@ details.qa[open] > summary { border-bottom: 1px solid var(--line); margin-bottom
     </button>
     <a class="icon-btn" href="./" aria-label="На главную" title="На главную"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/></svg></a>
     <a class="brand" href="#home">Само<span>учитель</span></a>
-    <a class="toplink" href="otzubov.html" target="_blank" rel="noopener">Шпаргалка для самопроверки ↗</a>
+    <a class="toplink" href="otzubov.html">Шпаргалка для самопроверки</a>
     <button class="icon-btn" id="themeBtn" aria-label="Тема: как в системе" title="Тема: как в системе">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
     </button>
@@ -4249,7 +4254,7 @@ chapters.forEach((c, i) => {
   const foot = document.createElement('div');
   foot.className = 'ch-foot';
   foot.innerHTML = `<button type="button" class="mk" data-read="${c.id}" aria-pressed="false">✓ Прочитал</button>
-    ${t.sheet ? `<a class="nx" href="${SHEET}#${t.sheet}" target="_blank" rel="noopener">Карточки по теме в шпаргалке ↗</a>` : ''}
+    ${t.sheet ? `<a class="nx" href="${SHEET}#${t.sheet}">Карточки по теме в шпаргалке</a>` : ''}
     <span class="spacer"></span>
     ${next ? `<a class="nx" href="#${next.id}">Дальше: ${esc(next.title)} →</a>` : `<a class="nx" href="#home">К программе →</a>`}`;
   c.el.append(foot);
