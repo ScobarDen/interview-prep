@@ -4005,6 +4005,147 @@ private:
   </div>
 </section>
 
+<section class="chapter" data-id="cpp-5" data-track="cpp" data-min="13" hidden>
+  <h1>Конструкторы и правило пяти</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>В JavaScript у класса один конструктор, а копирование объекта — твоя забота. В C++ компилятор сам дописывает классу до шести служебных функций, и от них зависит, что происходит при каждом <code>=</code>, передаче в функцию и <code>return</code>. Вопрос «какие конструкторы знаешь и когда какой вызывается» — стандартный для собеса по C++.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Бумажный документ. Его можно написать с нуля (обычный конструктор), снять ксерокопию (копирование) или отдать оригинал в другие руки (перемещение). После ксерокопии документов два, после передачи — один, а у тебя осталась пустая папка.</p></div>
+
+  <h2>Шесть специальных функций</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class Buffer {
+public:
+  Buffer();                              <span class="c">// конструктор по умолчанию</span>
+  explicit Buffer(std::size_t size);     <span class="c">// конструктор с параметрами</span>
+  Buffer(const Buffer&amp; other);           <span class="c">// конструктор копирования</span>
+  Buffer(Buffer&amp;&amp; other) noexcept;       <span class="c">// конструктор перемещения</span>
+  Buffer&amp; operator=(const Buffer&amp; other);      <span class="c">// копирующее присваивание</span>
+  Buffer&amp; operator=(Buffer&amp;&amp; other) noexcept;  <span class="c">// перемещающее присваивание</span>
+  ~Buffer();                             <span class="c">// деструктор</span>
+};</code></pre></div>
+  <p>Специальных функций шесть: конструктор по умолчанию, два копирования, два перемещения и деструктор. Конструктор с параметрами к ним не относится, его компилятор никогда не напишет за тебя. <code>Buffer&amp;&amp;</code> читается как «ссылка на временный объект, который можно обобрать».</p>
+
+  <h2>Когда какой вызывается</h2>
+  <div class="tbl"><table>
+    <tr><th>Код</th><th>Что вызовется</th></tr>
+    <tr><td><code>Buffer a;</code></td><td>Конструктор по умолчанию</td></tr>
+    <tr><td><code>Buffer a(1024);</code> или <code>Buffer a{1024};</code></td><td>Конструктор с параметрами</td></tr>
+    <tr><td><code>Buffer b(a);</code> или <code>Buffer b = a;</code></td><td>Конструктор копирования. Знак <code>=</code> при объявлении — это создание, а не присваивание</td></tr>
+    <tr><td><code>b = a;</code></td><td>Копирующее присваивание: <code>b</code> уже существует</td></tr>
+    <tr><td><code>Buffer c = std::move(a);</code></td><td>Конструктор перемещения</td></tr>
+    <tr><td><code>c = std::move(b);</code></td><td>Перемещающее присваивание</td></tr>
+    <tr><td><code>void f(Buffer x); f(a);</code></td><td>Копирование: аргумент передан по значению</td></tr>
+    <tr><td><code>Buffer make() { return Buffer(8); }</code></td><td>Ни копии, ни перемещения: объект создаётся сразу на месте (copy elision, с C++17 гарантировано)</td></tr>
+  </table></div>
+  <p>Самый частый вопрос-ловушка — разница между третьей и четвёртой строкой. Если объект создаётся в этой строке, работает конструктор. Если он уже существовал, работает оператор присваивания.</p>
+
+  <h2>Список инициализации</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class Channel {
+public:
+  Channel(int id, const std::string&amp; name)
+    : id_(id), name_(name) {}        <span class="c">// поля создаются сразу с нужными значениями</span>
+private:
+  const int id_;
+  std::string name_;
+};</code></pre></div>
+  <p>Часть после двоеточия — <span class="term">список инициализации</span>. Без него поле сначала создаётся пустым, а потом в теле конструктора ему присваивают значение: две операции вместо одной. Для трёх видов полей список обязателен, потому что присвоить им значение позже нельзя: <code>const</code>-поля, ссылки и поля, у типа которых нет конструктора по умолчанию.</p>
+  <div class="box myth"><span class="lbl">Ловушка про порядок</span>
+    <p>Поля инициализируются в порядке их объявления в классе, а не в порядке записи в списке. Если <code>size_</code> объявлен после <code>data_</code>, то <code>data_(new int[size_])</code> прочитает ещё не заданный <code>size_</code>. Компилятор об этом предупреждает (<code>-Wreorder</code>).</p></div>
+
+  <h2>explicit</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class Buffer { public: Buffer(std::size_t size); };
+void send(const Buffer&amp; b);
+
+send(1024);   <span class="c">// компилируется: число молча превратилось в Buffer на 1024 байта</span></code></pre></div>
+  <p>Конструктор с одним аргументом работает ещё и как неявное преобразование типа. Слово <code>explicit</code> это запрещает: <code>send(1024)</code> перестанет компилироваться, придётся написать <code>send(Buffer(1024))</code>. Правило: конструкторы с одним аргументом по умолчанию делают <code>explicit</code>.</p>
+
+  <h2>Копирование: поверхностное и глубокое</h2>
+  <p>Если конструктор копирования не написать, компилятор сгенерирует свой: он копирует каждое поле. Для чисел и строк этого хватает. Для сырого указателя копируется адрес, а не данные.</p>
+  <div class="code"><div class="code-head"><span>cpp — класс с ошибкой</span></div><pre><code>class Buffer {
+public:
+  explicit Buffer(std::size_t n) : size_(n), data_(new int[n]) {}
+  ~Buffer() { delete[] data_; }
+private:
+  std::size_t size_;
+  int* data_;
+};
+
+Buffer a(8);
+Buffer b = a;   <span class="c">// скопирован адрес: a и b смотрят на один массив</span>
+                <span class="c">// в конце блока оба деструктора вызовут delete[] для него: двойное освобождение</span></code></pre></div>
+  <p>Копия адреса называется <span class="term">поверхностной</span>. <span class="term">Глубокая</span> копия выделяет свою память и переносит в неё содержимое:</p>
+  <div class="code"><div class="code-head"><span>cpp — копирование и перемещение вручную</span></div><pre><code>Buffer(const Buffer&amp; other)
+  : size_(other.size_), data_(new int[other.size_]) {
+  std::copy(other.data_, other.data_ + size_, data_);   <span class="c">// свой массив с теми же числами</span>
+}
+
+Buffer(Buffer&amp;&amp; other) noexcept
+  : size_(other.size_), data_(other.data_) {            <span class="c">// забрали чужой массив</span>
+  other.size_ = 0;
+  other.data_ = nullptr;      <span class="c">// обязательно: иначе деструктор other удалит наш массив</span>
+}</code></pre></div>
+
+  <h2>Правило трёх, пяти и нуля</h2>
+  <ul>
+    <li><b>Правило трёх.</b> Если классу понадобился свой деструктор, конструктор копирования или копирующее присваивание, то нужны все три. Свой деструктор означает, что класс владеет ресурсом, а значит копирование по умолчанию его сломает.</li>
+    <li><b>Правило пяти.</b> То же после C++11: к трём добавились конструктор перемещения и перемещающее присваивание.</li>
+    <li><b>Правило нуля.</b> Лучший вариант — не писать ни одной из пяти. Ресурсы держат поля, которые сами умеют копироваться и удаляться: <code>std::vector</code>, <code>std::string</code>, <code>std::unique_ptr</code>. Тот же <code>Buffer</code> с полем <code>std::vector&lt;int&gt;</code> вместо <code>int*</code> корректен без единой служебной функции.</li>
+  </ul>
+
+  <h2>= default и = delete</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class Connection {
+public:
+  Connection() = default;                                <span class="c">// попросить версию компилятора</span>
+  Connection(const Connection&amp;) = delete;                <span class="c">// запретить копирование</span>
+  Connection&amp; operator=(const Connection&amp;) = delete;
+};</code></pre></div>
+  <p>Копирование запрещают у объектов, которые нельзя размножить: сетевое соединение, файл, мьютекс. Так устроен <code>unique_ptr</code>, и по той же причине нельзя копировать <code>QObject</code>.</p>
+  <p>Правила генерации, которые спрашивают:</p>
+  <ul>
+    <li>Объявил любой свой конструктор — конструктор по умолчанию больше не генерируется. Вернуть его можно через <code>= default</code>.</li>
+    <li>Объявил деструктор или копирование — перемещение не генерируется, и вместо него молча работает копирование.</li>
+  </ul>
+
+  <h2>Порядок создания и разрушения</h2>
+  <ol>
+    <li>Сначала конструктор базового класса.</li>
+    <li>Потом поля в порядке объявления.</li>
+    <li>Потом тело конструктора.</li>
+  </ol>
+  <p>Деструкторы идут в строго обратном порядке. Отсюда следствие: в конструкторе и деструкторе виртуальные функции не работают полиморфно. Пока выполняется конструктор базового класса, часть наследника ещё не создана, поэтому вызовется версия базового класса.</p>
+
+  <h2>Ещё два термина</h2>
+  <ul>
+    <li><b>Делегирующий конструктор</b> вызывает другой конструктор того же класса: <code>Buffer() : Buffer(1024) {}</code>. Убирает дублирование.</li>
+    <li><b><code>noexcept</code> у перемещения.</b> Когда <code>std::vector</code> растёт и переносит элементы в новую память, он использует перемещение только с пометкой <code>noexcept</code>. Без неё он копирует, потому что после исключения посреди переноса не смог бы вернуть всё как было.</li>
+  </ul>
+
+  <div class="box ai"><span class="lbl">Когда читаешь класс от агента</span>
+    <ul>
+      <li>В классе есть сырой указатель и деструктор с <code>delete</code>, а копирования нет — это двойное освобождение при первой же копии.</li>
+      <li>Конструктор с одним аргументом без <code>explicit</code>.</li>
+      <li>Порядок в списке инициализации не совпадает с порядком полей.</li>
+      <li>Конструктор перемещения без <code>noexcept</code> или без обнуления источника.</li>
+    </ul></div>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Кроме обычных конструкторов, у класса шесть специальных функций: конструктор по умолчанию, копирующие конструктор и присваивание, перемещающие конструктор и присваивание, деструктор. Компилятор генерирует их сам, и они работают по полям. Если класс владеет ресурсом через сырой указатель, версия по умолчанию даёт поверхностную копию и двойное освобождение, поэтому по правилу пяти пишут все пять. На практике я следую правилу нуля: ресурсы держат vector, string и умные указатели, и писать ничего не нужно.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Чем <code>Buffer b = a;</code> отличается от <code>b = a;</code>?</summary><p>Первое создаёт объект и вызывает конструктор копирования. Второе работает с уже существующим объектом и вызывает оператор присваивания.</p></details>
+    <details class="qa"><summary>Зачем нужен список инициализации?</summary><p>Поля создаются сразу с нужным значением, без лишнего присваивания. Для <code>const</code>-полей, ссылок и типов без конструктора по умолчанию другого способа нет.</p></details>
+    <details class="qa"><summary>В каком порядке инициализируются поля?</summary><p>В порядке объявления в классе. Порядок записи в списке инициализации ни на что не влияет.</p></details>
+    <details class="qa"><summary>Что делает <code>explicit</code>?</summary><p>Запрещает использовать конструктор для неявного преобразования типов.</p></details>
+    <details class="qa"><summary>Сформулируй правило пяти и правило нуля.</summary><p>Пяти: если пишешь свой деструктор, копирование или перемещение, нужны все пять функций. Нуля: лучше хранить ресурсы в полях, которые управляют ими сами, и не писать ни одной.</p></details>
+    <details class="qa"><summary>Что обязан сделать конструктор перемещения с объектом-источником?</summary><p>Оставить его в корректном пустом состоянии, например обнулить указатель. Иначе деструктор источника освободит уже переданный ресурс.</p></details>
+    <details class="qa"><summary>Можно ли вызывать виртуальную функцию в конструкторе?</summary><p>Можно, но вызовется версия того класса, чей конструктор сейчас выполняется: часть наследника ещё не создана.</p></details>
+    <details class="qa"><summary>Как запретить копирование объекта?</summary><p>Объявить конструктор копирования и копирующее присваивание с <code>= delete</code>.</p></details>
+  </div>
+  <div class="more"><a href="https://ru.cppreference.com/w/cpp/language/rule_of_three" target="_blank" rel="noopener">cppreference: правило трёх, пяти и нуля ↗</a></div>
+</section>
+
 <section class="chapter" data-id="cpp-3" data-track="cpp" data-min="11" hidden>
   <h1>STL и шаблоны</h1>
   <div class="box why"><span class="lbl">Зачем это</span>
@@ -4112,6 +4253,152 @@ T average(const std::vector&lt;T&gt;&amp; v);      <span class="c">// average д
   </div>
 </section>
 
+<section class="chapter" data-id="cpp-6" data-track="cpp" data-min="14" hidden>
+  <h1>Современный C++: стандарты, auto, лямбды, optional, variant, any</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>На собесе спрашивают «какие стандарты C++ знаешь и что в них появилось». Это проверка, пишешь ли ты на языке 2011 года и новее или на «Си с классами». Достаточно знать, что принёс каждый стандарт, и уверенно объяснить пять-шесть вещей: <code>auto</code>, лямбды, умные указатели, <code>optional</code>, <code>variant</code>, <code>any</code>.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Как ECMAScript. Был старый JS, потом вышел ES6 и поменял стиль письма, дальше каждый год добавляют понемногу. В C++ роль ES6 сыграл C++11, а новые стандарты выходят раз в три года.</p></div>
+
+  <h2>Стандарты: что в каком появилось</h2>
+  <div class="tbl"><table>
+    <tr><th>Стандарт</th><th>Главное</th></tr>
+    <tr><td><b>C++98 / 03</b></td><td>Классы, шаблоны, STL, исключения. «Старый» C++</td></tr>
+    <tr><td><b>C++11</b></td><td><code>auto</code>, лямбды, семантика перемещения и <code>&amp;&amp;</code>, <code>unique_ptr</code> и <code>shared_ptr</code>, <code>nullptr</code>, цикл по диапазону, <code>override</code>, <code>enum class</code>, <code>constexpr</code>, <code>std::thread</code>, единая инициализация в <code>{}</code></td></tr>
+    <tr><td><b>C++14</b></td><td>Обобщённые лямбды (<code>auto</code> в параметрах), <code>make_unique</code>, вывод типа возврата функции</td></tr>
+    <tr><td><b>C++17</b></td><td><code>optional</code>, <code>variant</code>, <code>any</code>, <code>string_view</code>, структурные привязки, <code>if</code> с инициализатором, <code>std::filesystem</code>, гарантированный copy elision</td></tr>
+    <tr><td><b>C++20</b></td><td>Концепты, ranges, корутины, модули, <code>std::span</code>, оператор <code>&lt;=&gt;</code>, <code>std::format</code></td></tr>
+    <tr><td><b>C++23</b></td><td><code>std::expected</code>, <code>std::print</code>, доработки ranges</td></tr>
+  </table></div>
+  <p>Если память подведёт, держись за три опоры: C++11 — переворот (auto, лямбды, move, умные указатели), C++17 — <code>optional</code>, <code>variant</code>, <code>any</code>, C++20 — концепты и ranges.</p>
+
+  <h2>auto</h2>
+  <p><code>auto</code> просит компилятор вывести тип переменной из значения справа. Тип остаётся статическим и известен при компиляции, это не <code>any</code> из TypeScript.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>auto count = 10;                        <span class="c">// int</span>
+auto it = samples.begin();              <span class="c">// вместо std::vector&lt;double&gt;::iterator</span>
+
+const std::string&amp; name() const;
+auto a = obj.name();                    <span class="c">// std::string — копия! auto отбросил const и ссылку</span>
+const auto&amp; b = obj.name();             <span class="c">// const std::string&amp; — без копии</span>
+
+for (auto s : sigs) { ... }          <span class="c">// каждый элемент копируется</span>
+for (const auto&amp; s : sigs) { ... }   <span class="c">// без копий, только чтение — стандартный вариант</span>
+for (auto&amp; s : sigs) { ... }         <span class="c">// можно менять элементы</span></code></pre></div>
+  <p>Правило, которое спрашивают: голый <code>auto</code> отбрасывает ссылку и <code>const</code>, поэтому получается копия. Нужна ссылка — пиши <code>auto&amp;</code> или <code>const auto&amp;</code> явно.</p>
+
+  <h2>Лямбда-функции</h2>
+  <p>Лямбда — безымянная функция, которую пишут прямо на месте использования. Аналог стрелочной функции в JS с одним отличием: в C++ ты явно перечисляешь, какие внешние переменные она захватывает и как.</p>
+  <div class="code"><div class="code-head"><span>cpp — из чего состоит</span></div><pre><code>auto isLoud = [threshold](const Signal&amp; s) { return s.level &gt; threshold; };
+<span class="c">//            ^ захват     ^ параметры          ^ тело</span></code></pre></div>
+  <div class="tbl"><table>
+    <tr><th>Захват</th><th>Что значит</th></tr>
+    <tr><td><code>[]</code></td><td>Ничего не захватывает</td></tr>
+    <tr><td><code>[x]</code></td><td><code>x</code> по значению: копия на момент создания лямбды</td></tr>
+    <tr><td><code>[&amp;x]</code></td><td><code>x</code> по ссылке: лямбда видит и может менять оригинал</td></tr>
+    <tr><td><code>[=]</code> / <code>[&amp;]</code></td><td>Всё используемое по значению / по ссылке</td></tr>
+    <tr><td><code>[this]</code></td><td>Указатель на текущий объект, чтобы обращаться к его полям</td></tr>
+    <tr><td><code>[p = std::move(ptr)]</code></td><td>Захват с инициализацией (C++14): так в лямбду передают <code>unique_ptr</code></td></tr>
+  </table></div>
+  <div class="code"><div class="code-head"><span>cpp — типичное использование</span></div><pre><code>std::sort(sigs.begin(), sigs.end(),
+          [](const Signal&amp; a, const Signal&amp; b) { return a.freq &lt; b.freq; });
+
+int calls = 0;
+auto counter = [calls]() mutable { return ++calls; };   <span class="c">// mutable: можно менять свою копию</span>
+
+auto add = [](auto a, auto b) { return a + b; };         <span class="c">// обобщённая лямбда, C++14</span></code></pre></div>
+  <p><b>Что такое лямбда внутри.</b> Компилятор превращает её в безымянный класс: захваченные переменные становятся полями, а тело — методом <code>operator()</code>. У каждой лямбды свой уникальный тип, поэтому её кладут в <code>auto</code>. Если нужно хранить «любую функцию с такой сигнатурой» в поле класса, берут <code>std::function&lt;bool(const Signal&amp;)&gt;</code>: он универсальнее, но чуть медленнее.</p>
+  <div class="box myth"><span class="lbl">Главная ловушка</span>
+    <p>Захват по ссылке плюс отложенный вызов. Лямбда пережила функцию, в которой создана, локальная переменная уже уничтожена, а ссылка на неё осталась висеть. Типичный случай — лямбда в <code>connect</code> или в потоке с захватом <code>[&amp;]</code>. Для отложенных вызовов захватывай по значению.</p></div>
+  <div class="code"><div class="code-head"><span>cpp — лямбда как слот в Qt</span></div><pre><code>connect(button, &amp;QPushButton::clicked, this, [this]() {
+  statusLabel-&gt;setText("Запущено");
+});
+<span class="c">// третий аргумент this — контекст: если объект удалят, соединение разорвётся само,</span>
+<span class="c">// и лямбда не обратится к мёртвому this</span></code></pre></div>
+
+  <h2>Мелочи C++11, которые называют одной строкой</h2>
+  <ul>
+    <li><code>nullptr</code> вместо <code>NULL</code> и <code>0</code>: у него свой тип, и он не путается с числом.</li>
+    <li><code>override</code>: компилятор проверит, что метод действительно переопределяет виртуальный.</li>
+    <li><code>enum class</code>: значения не превращаются в <code>int</code> молча и не засоряют область видимости.</li>
+    <li><code>constexpr</code>: значение или функция вычисляется при компиляции.</li>
+  </ul>
+
+  <h2>optional: значение или ничего</h2>
+  <p>До C++17 «не нашлось» возвращали через <code>-1</code>, <code>nullptr</code> или отдельный флаг. <code>std::optional&lt;T&gt;</code> говорит это типом: внутри либо значение <code>T</code>, либо пусто. Аналог <code>T | undefined</code> в TypeScript.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::optional&lt;Signal&gt; findByFreq(double freq) {
+  for (const auto&amp; s : sigs_)
+    if (s.freq == freq) return s;
+  return std::nullopt;                  <span class="c">// «ничего»</span>
+}
+
+if (auto found = findByFreq(433.9)) {   <span class="c">// optional превращается в true, если не пуст</span>
+  show(*found);                         <span class="c">// * или -&gt; достают значение</span>
+}
+double level = findByFreq(100.0).value_or(Signal{}).level;   <span class="c">// запасное значение</span></code></pre></div>
+  <p><code>*opt</code> на пустом объекте — неопределённое поведение. <code>opt.value()</code> на пустом бросает исключение <code>bad_optional_access</code>. Значение лежит внутри самого <code>optional</code>, память в куче не выделяется.</p>
+
+  <h2>variant: один из перечисленных типов</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::variant&lt;int, double, std::string&gt; value = 3.14;   <span class="c">// сейчас внутри double</span>
+value = std::string("ошибка");                          <span class="c">// теперь string</span>
+
+if (auto p = std::get_if&lt;std::string&gt;(&amp;value)) {        <span class="c">// указатель или nullptr</span>
+  log(*p);
+}
+std::visit([](const auto&amp; v) { std::cout &lt;&lt; v; }, value);   <span class="c">// вызвать для того, что внутри</span></code></pre></div>
+  <p>Это типобезопасная замена <code>union</code>: <code>variant</code> помнит, какой тип сейчас хранит. <code>std::get&lt;int&gt;(value)</code> при другом типе внутри бросает <code>bad_variant_access</code>. Аналог в TypeScript — объединение <code>number | string</code>.</p>
+
+  <h2>any: вообще что угодно</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::any box = 42;
+box = std::string("текст");                     <span class="c">// тип заранее не ограничен</span>
+
+auto s = std::any_cast&lt;std::string&gt;(box);       <span class="c">// достать: надо точно назвать тип</span>
+auto n = std::any_cast&lt;int&gt;(box);               <span class="c">// внутри не int — исключение bad_any_cast</span>
+if (auto p = std::any_cast&lt;int&gt;(&amp;box)) { ... }  <span class="c">// вариант с указателем: nullptr вместо исключения</span></code></pre></div>
+  <p>Ближе всего к <code>unknown</code> из TypeScript: положить можно что угодно, а достать — только назвав точный тип. Нужен редко: в основном для обобщённых контейнеров настроек или данных плагинов. Для больших объектов выделяет память в куче. В Qt ту же роль играет <code>QVariant</code>.</p>
+  <div class="tbl"><table>
+    <tr><th></th><th>Что хранит</th><th>Когда брать</th></tr>
+    <tr><td><code>optional&lt;T&gt;</code></td><td><code>T</code> или ничего</td><td>Результата может не быть</td></tr>
+    <tr><td><code>variant&lt;A, B&gt;</code></td><td>Один тип из известного списка</td><td>Варианты известны заранее</td></tr>
+    <tr><td><code>any</code></td><td>Любой тип</td><td>Список типов заранее неизвестен. Последнее средство</td></tr>
+  </table></div>
+
+  <h2>Ещё из C++17, что стоит узнавать в коде</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>for (const auto&amp; [id, name] : channels) { ... }       <span class="c">// структурные привязки: как деструктуризация в JS</span>
+
+if (auto it = cache.find(key); it != cache.end()) {   <span class="c">// if с инициализатором: it виден только здесь</span>
+  use(it-&gt;second);
+}
+
+void parse(std::string_view text);                    <span class="c">// «окно» в чужую строку без копии</span></code></pre></div>
+  <p><code>string_view</code> не владеет данными: это указатель и длина. Вернуть <code>string_view</code> на локальную строку — висячая ссылка.</p>
+
+  <h2>C++20 в четырёх строках</h2>
+  <ul>
+    <li><b>Концепты</b> — именованные требования к параметру шаблона. Ошибка «тип не подходит» становится читаемой.</li>
+    <li><b>Ranges</b> — алгоритмы принимают контейнер целиком и собираются в цепочки: <code>sigs | views::filter(isLoud) | views::transform(toDb)</code>. Похоже на <code>.filter().map()</code>, но лениво.</li>
+    <li><b><code>std::span</code></b> — «окно» в массив или вектор без копии, как <code>string_view</code> для строк.</li>
+    <li><b>Корутины и модули</b> — достаточно знать, что они есть: функции с <code>co_await</code> и замена заголовочным файлам.</li>
+  </ul>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Современный C++ начинается с C++11: auto, лямбды, семантика перемещения, умные указатели, nullptr, цикл по диапазону. C++14 добавил обобщённые лямбды и make_unique. C++17 — optional, variant, any, string_view и структурные привязки. C++20 — концепты, ranges, корутины и модули. Лямбда — это безымянный объект с operator(), у которого захваченные переменные становятся полями. Захватывать можно по значению или по ссылке, и главный риск — ссылка на переменную, которая уже уничтожена.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Назови по три нововведения C++11 и C++17.</summary><p>C++11: <code>auto</code>, лямбды, умные указатели, семантика перемещения, <code>nullptr</code>. C++17: <code>optional</code>, <code>variant</code>, <code>any</code>, <code>string_view</code>, структурные привязки.</p></details>
+    <details class="qa"><summary>Какой тип получит <code>auto x = obj.name();</code>, если метод возвращает <code>const std::string&amp;</code>?</summary><p><code>std::string</code>, то есть копию. Голый <code>auto</code> отбрасывает ссылку и <code>const</code>.</p></details>
+    <details class="qa"><summary>Чем захват <code>[x]</code> отличается от <code>[&amp;x]</code>?</summary><p><code>[x]</code> копирует значение в момент создания лямбды. <code>[&amp;x]</code> хранит ссылку: лямбда видит изменения оригинала и зависит от времени его жизни.</p></details>
+    <details class="qa"><summary>Что такое лямбда с точки зрения компилятора?</summary><p>Объект безымянного класса. Захваченные переменные — его поля, тело — метод <code>operator()</code>.</p></details>
+    <details class="qa"><summary>Зачем лямбде слово <code>mutable</code>?</summary><p>По умолчанию захваченные по значению копии менять нельзя. <code>mutable</code> это разрешает.</p></details>
+    <details class="qa"><summary>Чем <code>optional</code> лучше возврата <code>-1</code> или <code>nullptr</code>?</summary><p>Отсутствие значения видно в типе, и нет «магических» значений, которые можно спутать с настоящими.</p></details>
+    <details class="qa"><summary>Чем <code>variant</code> отличается от <code>any</code>?</summary><p><code>variant</code> хранит один тип из заранее заданного списка, и компилятор его знает. <code>any</code> хранит что угодно, тип проверяется только при извлечении.</p></details>
+    <details class="qa"><summary>Что будет при <code>any_cast</code> к неверному типу?</summary><p>Исключение <code>bad_any_cast</code>. Вариант с указателем вернёт <code>nullptr</code>.</p></details>
+    <details class="qa"><summary>Чем опасен <code>string_view</code>?</summary><p>Он не владеет строкой. Если строка уничтожена, <code>string_view</code> указывает на освобождённую память.</p></details>
+  </div>
+  <div class="more"><a href="https://ru.cppreference.com/w/cpp/language/lambda" target="_blank" rel="noopener">cppreference: лямбда-выражения ↗</a><a href="https://ru.cppreference.com/w/cpp/utility/optional" target="_blank" rel="noopener">cppreference: std::optional ↗</a></div>
+</section>
+
 <section class="chapter" data-id="cpp-4" data-track="cpp" data-min="13" hidden>
   <h1>Qt: сигналы, слоты, дерево объектов, потоки</h1>
   <div class="box why"><span class="lbl">Зачем это</span>
@@ -4212,6 +4499,390 @@ thread-&gt;start();</code></pre></div>
   </div>
 </section>
 
+<section class="chapter" data-id="cpp-7" data-track="cpp" data-min="14" hidden>
+  <h1>Алгоритмы на C++: бинарный поиск и сортировки руками</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Идеи поиска и сортировки были в треке Computer Science на JavaScript. На собесе по C++ те же алгоритмы просят написать на C++ на листке или в редакторе и назвать сложность. В работе их никто не пишет вручную, для этого есть <code>std::sort</code>. Проверяют другое: понимаешь ли ты индексы, границы и цену операций.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Бинарный поиск — игра «угадай число от 1 до 100», где на каждый ответ говорят «больше» или «меньше». Называешь середину и каждый раз выбрасываешь половину вариантов. Семи вопросов хватает всегда.</p></div>
+
+  <h2>Бинарный поиск</h2>
+  <p>Работает только на отсортированных данных. Сложность O(log n): в массиве на миллион элементов хватит 20 шагов.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>int binarySearch(const std::vector&lt;int&gt;&amp; a, int target) {
+  int lo = 0;
+  int hi = static_cast&lt;int&gt;(a.size()) - 1;    <span class="c">// ищем на отрезке [lo, hi], обе границы включены</span>
+  while (lo &lt;= hi) {                           <span class="c">// &lt;=, потому что отрезок из одного элемента ещё надо проверить</span>
+    int mid = lo + (hi - lo) / 2;              <span class="c">// не (lo + hi) / 2: сумма может переполнить int</span>
+    if (a[mid] == target) return mid;
+    if (a[mid] &lt; target) lo = mid + 1;         <span class="c">// искомое правее, mid уже проверен</span>
+    else                 hi = mid - 1;         <span class="c">// искомое левее</span>
+  }
+  return -1;                                   <span class="c">// не нашли</span>
+}</code></pre></div>
+  <p>Три места, где ошибаются, и о каждом могут спросить:</p>
+  <ul>
+    <li><b>Условие цикла.</b> При включённых границах нужно <code>lo &lt;= hi</code>. С <code>&lt;</code> алгоритм пропустит последний элемент.</li>
+    <li><b>Сдвиг границ.</b> <code>mid + 1</code> и <code>mid - 1</code>, а не <code>mid</code>. Иначе при <code>lo == hi</code> цикл станет бесконечным.</li>
+    <li><b>Середина.</b> <code>lo + (hi - lo) / 2</code> защищает от переполнения на больших массивах.</li>
+  </ul>
+  <div class="code"><div class="code-head"><span>cpp — то же из стандартной библиотеки</span></div><pre><code>bool found = std::binary_search(a.begin(), a.end(), 42);   <span class="c">// только «есть или нет»</span>
+
+auto it = std::lower_bound(a.begin(), a.end(), 42);        <span class="c">// первый элемент &gt;= 42</span>
+if (it != a.end() &amp;&amp; *it == 42) {
+  auto index = it - a.begin();                             <span class="c">// позиция найденного</span>
+}
+auto last = std::upper_bound(a.begin(), a.end(), 42);      <span class="c">// первый элемент &gt; 42</span>
+<span class="c">// last - it — сколько раз 42 встречается в массиве</span></code></pre></div>
+
+  <h2>Сортировки: сводная таблица</h2>
+  <div class="tbl"><table>
+    <tr><th>Алгоритм</th><th>В среднем</th><th>В худшем</th><th>Доп. память</th><th>Стабильная</th></tr>
+    <tr><td>Пузырьком</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td>Да</td></tr>
+    <tr><td>Выбором</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td>Нет</td></tr>
+    <tr><td>Вставками</td><td>O(n²)</td><td>O(n²)</td><td>O(1)</td><td>Да</td></tr>
+    <tr><td>Слиянием</td><td>O(n log n)</td><td>O(n log n)</td><td>O(n)</td><td>Да</td></tr>
+    <tr><td>Быстрая</td><td>O(n log n)</td><td>O(n²)</td><td>O(log n)</td><td>Нет</td></tr>
+    <tr><td>Пирамидальная</td><td>O(n log n)</td><td>O(n log n)</td><td>O(1)</td><td>Нет</td></tr>
+  </table></div>
+  <p><span class="term">Стабильная</span> сортировка сохраняет исходный порядок равных элементов. Пример: список сигналов отсортирован по времени, потом его сортируют по частоте. После стабильной сортировки сигналы одной частоты остались в порядке времени, после нестабильной — как повезёт.</p>
+
+  <h2>Пузырьком</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>void bubbleSort(std::vector&lt;int&gt;&amp; a) {
+  for (std::size_t i = 0; i + 1 &lt; a.size(); ++i) {
+    bool swapped = false;
+    for (std::size_t j = 0; j + 1 &lt; a.size() - i; ++j) {   <span class="c">// хвост из i элементов уже на месте</span>
+      if (a[j] &gt; a[j + 1]) {
+        std::swap(a[j], a[j + 1]);
+        swapped = true;
+      }
+    }
+    if (!swapped) return;       <span class="c">// ни одного обмена: массив отсортирован</span>
+  }
+}</code></pre></div>
+  <p>Соседние элементы сравниваются и меняются местами, за один проход самый большой «всплывает» в конец. Проверка <code>swapped</code> даёт O(n) на уже отсортированном массиве. Запись <code>i + 1 &lt; a.size()</code> вместо <code>i &lt; a.size() - 1</code> не случайна: <code>size()</code> беззнаковый, и на пустом векторе <code>0 - 1</code> превратится в огромное число.</p>
+
+  <h2>Вставками</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>void insertionSort(std::vector&lt;int&gt;&amp; a) {
+  for (std::size_t i = 1; i &lt; a.size(); ++i) {
+    int key = a[i];                       <span class="c">// элемент, который вставляем в отсортированную левую часть</span>
+    std::size_t j = i;
+    while (j &gt; 0 &amp;&amp; a[j - 1] &gt; key) {
+      a[j] = a[j - 1];                    <span class="c">// сдвигаем большие элементы вправо</span>
+      --j;
+    }
+    a[j] = key;
+  }
+}</code></pre></div>
+  <p>Так раскладывают карты в руке. Из квадратичных сортировок эта самая полезная: на маленьких и почти отсортированных массивах она быстрее «умных» алгоритмов, поэтому библиотечные сортировки переключаются на неё для коротких участков.</p>
+
+  <h2>Быстрая сортировка</h2>
+  <p>Идея: выбрать опорный элемент, переставить массив так, чтобы слева оказались меньшие, а справа большие, и повторить для обеих частей.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>int partition(std::vector&lt;int&gt;&amp; a, int lo, int hi) {
+  int mid = lo + (hi - lo) / 2;
+  std::swap(a[mid], a[hi]);              <span class="c">// опорный берём из середины и убираем в конец</span>
+  int pivot = a[hi];
+  int i = lo;                            <span class="c">// сюда встанет следующий элемент меньше опорного</span>
+  for (int j = lo; j &lt; hi; ++j) {
+    if (a[j] &lt; pivot) std::swap(a[i++], a[j]);
+  }
+  std::swap(a[i], a[hi]);                <span class="c">// опорный встаёт на своё окончательное место</span>
+  return i;
+}
+
+void quickSort(std::vector&lt;int&gt;&amp; a, int lo, int hi) {
+  if (lo &gt;= hi) return;                  <span class="c">// ноль или один элемент: уже отсортировано</span>
+  int p = partition(a, lo, hi);
+  quickSort(a, lo, p - 1);
+  quickSort(a, p + 1, hi);
+}
+<span class="c">// вызов: quickSort(a, 0, static_cast&lt;int&gt;(a.size()) - 1);</span></code></pre></div>
+  <p><b>Откуда O(n²) в худшем случае.</b> Если опорный каждый раз оказывается минимумом или максимумом, массив делится на части размером 0 и n−1, и глубина рекурсии становится n вместо log n. Так происходит на отсортированном массиве, если брать опорным первый или последний элемент. Поэтому берут середину, случайный элемент или медиану из трёх.</p>
+
+  <h2>Сортировка слиянием</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>void mergeSort(std::vector&lt;int&gt;&amp; a, int lo, int hi) {   <span class="c">// сортирует отрезок [lo, hi)</span>
+  if (hi - lo &lt; 2) return;
+  int mid = lo + (hi - lo) / 2;
+  mergeSort(a, lo, mid);
+  mergeSort(a, mid, hi);
+
+  std::vector&lt;int&gt; merged;
+  merged.reserve(hi - lo);
+  int i = lo, j = mid;
+  while (i &lt; mid &amp;&amp; j &lt; hi) {
+    if (a[j] &lt; a[i]) merged.push_back(a[j++]);   <span class="c">// при равенстве берём левый: это и даёт стабильность</span>
+    else             merged.push_back(a[i++]);
+  }
+  while (i &lt; mid) merged.push_back(a[i++]);
+  while (j &lt; hi)  merged.push_back(a[j++]);
+  std::copy(merged.begin(), merged.end(), a.begin() + lo);
+}</code></pre></div>
+  <p>Массив делится пополам, половины сортируются рекурсивно, затем две отсортированные половины сливаются за один проход. Всегда O(n log n) и стабильна, плата — дополнительная память O(n).</p>
+
+  <h2>Что внутри std::sort</h2>
+  <ul>
+    <li><code>std::sort</code> — гибрид, его называют introsort: быстрая сортировка, которая при слишком глубокой рекурсии переключается на пирамидальную, а короткие участки досортировывает вставками. Гарантирует O(n log n), нестабильна. Требует произвольный доступ, поэтому <code>std::list</code> сортируют методом <code>list.sort()</code>.</li>
+    <li><code>std::stable_sort</code> — стабильная, на основе слияния, берёт дополнительную память.</li>
+    <li><code>std::partial_sort</code> — упорядочить только первые k элементов.</li>
+    <li><code>std::nth_element</code> — поставить на позицию k тот элемент, который стоял бы там после сортировки, в среднем за O(n). Пригодится для медианы в следующей главе.</li>
+  </ul>
+  <div class="code"><div class="code-head"><span>cpp — свой порядок</span></div><pre><code>std::sort(sigs.begin(), sigs.end(),
+          [](const Signal&amp; a, const Signal&amp; b) { return a.level &gt; b.level; });   <span class="c">// по убыванию уровня</span></code></pre></div>
+  <div class="box myth"><span class="lbl">Ловушка с компаратором</span>
+    <p>Функция сравнения обязана отвечать на вопрос «строго ли a раньше b». Для равных элементов она должна вернуть <code>false</code>. Компаратор с <code>&lt;=</code> или <code>&gt;=</code> нарушает это требование, и <code>std::sort</code> может выйти за границы массива и упасть. Это неопределённое поведение, а не просто неверный порядок.</p></div>
+
+  <h2>Почему быстрее n log n не бывает и когда всё же бывает</h2>
+  <p>Доказано, что сортировка, которая только сравнивает элементы между собой, не может в худшем случае сделать меньше порядка n log n сравнений. Обойти предел можно, если не сравнивать. <span class="term">Сортировка подсчётом</span> работает за O(n + k) для целых чисел из небольшого диапазона k: считает, сколько раз встретилось каждое значение, и выписывает их по порядку.</p>
+
+  <div class="box ai"><span class="lbl">Как отвечать у доски</span>
+    <ul>
+      <li>Сначала скажи идею одной фразой и сложность, потом пиши код.</li>
+      <li>Проговори вслух, включены ли границы отрезка, и держись этого до конца.</li>
+      <li>Проверь на пустом массиве, одном элементе и двух элементах.</li>
+      <li>На вопрос «как отсортировал бы в работе» ответ один: <code>std::sort</code> с лямбдой, а <code>stable_sort</code> — если важен порядок равных.</li>
+    </ul></div>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Бинарный поиск работает на отсортированном массиве за O(log n): сравниваю с серединой и отбрасываю половину. Середину считаю как lo + (hi − lo) / 2, чтобы не было переполнения. Простые сортировки — пузырьком, выбором, вставками — квадратичные. Слиянием всегда n log n и стабильна, но требует O(n) памяти. Быстрая в среднем n log n и сортирует на месте, но при плохом опорном элементе деградирует до n². std::sort — это introsort: быстрая с переходом на пирамидальную и на вставки, гарантированно n log n, нестабильна.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Какое условие нужно для бинарного поиска и какая у него сложность?</summary><p>Данные должны быть отсортированы. O(log n).</p></details>
+    <details class="qa"><summary>Почему середину считают как <code>lo + (hi - lo) / 2</code>?</summary><p>Сумма <code>lo + hi</code> может переполнить <code>int</code> на больших массивах.</p></details>
+    <details class="qa"><summary>Что возвращает <code>std::lower_bound</code>?</summary><p>Итератор на первый элемент, который не меньше искомого. Если такого нет — <code>end()</code>.</p></details>
+    <details class="qa"><summary>Что такое стабильная сортировка? Приведи пример стабильной и нестабильной.</summary><p>Она сохраняет исходный порядок равных элементов. Стабильны слиянием, вставками, пузырьком. Нестабильны быстрая, пирамидальная, выбором.</p></details>
+    <details class="qa"><summary>Когда быстрая сортировка работает за O(n²)?</summary><p>Когда опорный элемент раз за разом оказывается крайним по величине: например, первый элемент на уже отсортированном массиве.</p></details>
+    <details class="qa"><summary>Чем сортировка слиянием платит за гарантированные O(n log n)?</summary><p>Дополнительной памятью O(n) под слияние.</p></details>
+    <details class="qa"><summary>Какой алгоритм внутри <code>std::sort</code>?</summary><p>Introsort: быстрая сортировка с переключением на пирамидальную при глубокой рекурсии и на вставки для коротких участков.</p></details>
+    <details class="qa"><summary>Чем плох компаратор <code>a &lt;= b</code>?</summary><p>Он возвращает <code>true</code> для равных элементов и нарушает требование строгого порядка. Результат — неопределённое поведение.</p></details>
+    <details class="qa"><summary>Зачем сортировка вставками, если она O(n²)?</summary><p>На коротких и почти отсортированных массивах она быстрее остальных, поэтому её используют внутри гибридных сортировок.</p></details>
+  </div>
+  <div class="more"><a href="https://ru.cppreference.com/w/cpp/algorithm/sort" target="_blank" rel="noopener">cppreference: std::sort ↗</a><a href="https://ru.cppreference.com/w/cpp/algorithm/lower_bound" target="_blank" rel="noopener">cppreference: std::lower_bound ↗</a></div>
+</section>
+
+<section class="chapter" data-id="cpp-8" data-track="cpp" data-min="9" hidden>
+  <h1>Среднее, медиана и мода</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Три способа описать набор чисел одним числом. Вопрос школьный, но на собесе он быстро превращается в задачу: «посчитай медиану массива на C++ и скажи сложность». Заодно проверяют, понимаешь ли ты, почему среднее врёт на данных с выбросами.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>В баре сидят пять человек с зарплатой около 100 тысяч. Заходит миллиардер. Средняя зарплата в баре стала сотни миллионов, хотя никто из пятерых не разбогател. Медиана почти не сдвинулась. Мода осталась прежней.</p></div>
+
+  <h2>Определения на одном примере</h2>
+  <p>Возьмём замеры: <code>2, 3, 3, 5, 100</code>.</p>
+  <div class="tbl"><table>
+    <tr><th>Величина</th><th>Что это</th><th>В примере</th></tr>
+    <tr><td><b>Среднее</b> (арифметическое)</td><td>Сумма, делённая на количество</td><td>113 / 5 = 22,6</td></tr>
+    <tr><td><b>Медиана</b></td><td>Значение посередине отсортированного набора: половина чисел не больше, половина не меньше</td><td>3</td></tr>
+    <tr><td><b>Мода</b></td><td>Значение, которое встречается чаще всех</td><td>3</td></tr>
+  </table></div>
+  <p>Одно число 100 утащило среднее к 22,6, хотя четыре замера из пяти не больше 5. Такое значение называют <span class="term">выбросом</span>. Среднее чувствительно к выбросам, медиана и мода — нет.</p>
+  <ul>
+    <li><b>Чётное количество.</b> У <code>2, 3, 5, 100</code> середины нет, медиана — среднее двух центральных: (3 + 5) / 2 = 4.</li>
+    <li><b>Мод может быть несколько.</b> В <code>1, 1, 2, 2, 3</code> моды две: 1 и 2. Если все значения разные, моды нет. Заранее уточни у интервьюера, что возвращать в таких случаях.</li>
+  </ul>
+
+  <h2>Когда что брать</h2>
+  <div class="tbl"><table>
+    <tr><th>Величина</th><th>Подходит</th><th>Пример</th></tr>
+    <tr><td>Среднее</td><td>Данные без резких выбросов; когда важна сумма</td><td>Средняя нагрузка, средний уровень шума</td></tr>
+    <tr><td>Медиана</td><td>Есть выбросы или перекошенное распределение</td><td>Зарплаты, время ответа сервера (медиана — это 50-й перцентиль, p50)</td></tr>
+    <tr><td>Мода</td><td>Категории, которые нельзя складывать</td><td>Самый частый тип ошибки, самый популярный размер</td></tr>
+  </table></div>
+  <p>В обработке сигналов на этом построен <span class="term">медианный фильтр</span>: каждое значение заменяют медианой его соседей в окне, например из пяти отсчётов. Одиночный всплеск помехи исчезает, а резкие перепады сигнала сохраняются. Скользящее среднее тот же всплеск размазало бы по соседям.</p>
+
+  <h2>Среднее на C++</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>double mean(const std::vector&lt;int&gt;&amp; v) {
+  if (v.empty()) return 0.0;                              <span class="c">// иначе деление на ноль; что возвращать — договорись</span>
+  double sum = std::accumulate(v.begin(), v.end(), 0.0);  <span class="c">// 0.0, не 0</span>
+  return sum / static_cast&lt;double&gt;(v.size());
+}</code></pre></div>
+  <p>Сложность O(n). Две ловушки, обе про третий аргумент <code>accumulate</code>: его тип задаёт тип суммы. С <code>0</code> сумма будет <code>int</code>, то есть может переполниться, а деление получится целочисленным и отбросит дробную часть.</p>
+
+  <h2>Медиана на C++</h2>
+  <div class="code"><div class="code-head"><span>cpp — через сортировку, O(n log n)</span></div><pre><code>double median(std::vector&lt;int&gt; v) {          <span class="c">// по значению: сортируем копию, оригинал не трогаем</span>
+  if (v.empty()) return 0.0;
+  std::sort(v.begin(), v.end());
+  std::size_t mid = v.size() / 2;
+  if (v.size() % 2 == 1) return v[mid];              <span class="c">// нечётное количество: центральный</span>
+  return (v[mid - 1] + v[mid]) / 2.0;                <span class="c">// чётное: среднее двух центральных; 2.0, не 2</span>
+}</code></pre></div>
+  <p>Сортировать весь массив ради одного элемента избыточно. <code>std::nth_element</code> ставит на нужную позицию тот элемент, который оказался бы там после сортировки, и делает это в среднем за O(n). Слева от него окажутся элементы не больше, справа — не меньше, но сами части не упорядочены.</p>
+  <div class="code"><div class="code-head"><span>cpp — через nth_element, в среднем O(n)</span></div><pre><code>double median(std::vector&lt;int&gt; v) {
+  if (v.empty()) return 0.0;
+  auto mid = v.begin() + v.size() / 2;
+  std::nth_element(v.begin(), mid, v.end());
+  if (v.size() % 2 == 1) return *mid;
+  int left = *std::max_element(v.begin(), mid);      <span class="c">// второй центральный — максимум левой части</span>
+  return (left + *mid) / 2.0;
+}</code></pre></div>
+  <p>Внутри <code>nth_element</code> — та же идея разбиения, что в быстрой сортировке, только рекурсия идёт в одну половину. Алгоритм называется quickselect.</p>
+
+  <h2>Мода на C++</h2>
+  <div class="code"><div class="code-head"><span>cpp — подсчёт в хэш-таблице, O(n)</span></div><pre><code>int mode(const std::vector&lt;int&gt;&amp; v) {        <span class="c">// считаем, что v не пуст</span>
+  std::unordered_map&lt;int, int&gt; count;
+  int best = v.front();
+  int bestCount = 0;
+  for (int x : v) {
+    int c = ++count[x];                       <span class="c">// сколько раз x встретился к этому моменту</span>
+    if (c &gt; bestCount) {                      <span class="c">// строго больше: при равенстве остаётся та, что набрала первой</span>
+      best = x;
+      bestCount = c;
+    }
+  }
+  return best;
+}</code></pre></div>
+  <p>O(n) по времени и O(n) дополнительной памяти. Вариант без дополнительной памяти: отсортировать и найти самую длинную серию одинаковых значений, это O(n log n). Для вещественных чисел мода в чистом виде почти бессмысленна: точных совпадений нет, значения сначала раскладывают по интервалам (гистограмма).</p>
+
+  <h2>Что могут спросить следом</h2>
+  <ul>
+    <li><b>Размах</b> — разница между максимумом и минимумом.</li>
+    <li><b>Дисперсия</b> — среднее квадратов отклонений от среднего. <b>Стандартное отклонение</b> — корень из дисперсии, показывает типичный разброс в тех же единицах, что и данные.</li>
+    <li><b>Взвешенное среднее</b> — каждое значение умножается на свой вес, сумма делится на сумму весов.</li>
+    <li><b>Скользящее среднее</b> — среднее по окну из последних k значений. Пересчитывается за O(1) на шаг: к сумме прибавляют новое значение и вычитают ушедшее из окна.</li>
+    <li><b>Медиана потока данных</b> — две кучи: в одной меньшая половина чисел, в другой большая. Добавление за O(log n), медиана за O(1).</li>
+  </ul>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Среднее — сумма, делённая на количество, считается за O(n), но чувствительно к выбросам. Медиана — центральный элемент отсортированного набора, при чётном количестве — среднее двух центральных; она к выбросам устойчива. Считаю её сортировкой за O(n log n) или через nth_element в среднем за O(n). Мода — самое частое значение, нахожу подсчётом в unordered_map за O(n). Мод может быть несколько, а на пустом наборе все три величины не определены, поэтому поведение на краях я уточняю заранее.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Найди среднее, медиану и моду набора 4, 1, 7, 1, 2.</summary><p>Отсортированный набор: 1, 1, 2, 4, 7. Среднее 15 / 5 = 3. Медиана 2. Мода 1.</p></details>
+    <details class="qa"><summary>Чему равна медиана набора 1, 2, 3, 10?</summary><p>(2 + 3) / 2 = 2,5.</p></details>
+    <details class="qa"><summary>Почему для зарплат берут медиану, а не среднее?</summary><p>Несколько очень больших значений сильно сдвигают среднее, и оно перестаёт описывать типичного человека. Медиана к выбросам устойчива.</p></details>
+    <details class="qa"><summary>Что не так с <code>std::accumulate(v.begin(), v.end(), 0) / v.size()</code> для вектора <code>int</code>?</summary><p>Сумма копится в <code>int</code> и может переполниться, а деление целочисленное: дробная часть теряется. На пустом векторе будет деление на ноль.</p></details>
+    <details class="qa"><summary>Как найти медиану быстрее, чем за O(n log n)?</summary><p><code>std::nth_element</code>: в среднем O(n), потому что упорядочивает массив только относительно одной позиции.</p></details>
+    <details class="qa"><summary>Какая сложность у поиска моды и за счёт чего?</summary><p>O(n) с хэш-таблицей счётчиков, ценой O(n) памяти. Без неё — сортировка и поиск самой длинной серии, O(n log n).</p></details>
+    <details class="qa"><summary>Чем медианный фильтр лучше скользящего среднего против одиночных всплесков?</summary><p>Медиана окна просто не выбирает выброс, и всплеск исчезает. Среднее размазывает его по соседним отсчётам.</p></details>
+  </div>
+  <div class="more"><a href="https://ru.cppreference.com/w/cpp/algorithm/nth_element" target="_blank" rel="noopener">cppreference: std::nth_element ↗</a></div>
+</section>
+
+<section class="chapter" data-id="cpp-9" data-track="cpp" data-min="13" hidden>
+  <h1>TCP и UDP: чем отличаются и как с ними работать в Qt</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>«Чем TCP отличается от UDP» — один из самых частых вопросов на любом собесе, а в приложениях на C++ и Qt, которые обмениваются данными с устройствами и другими программами, это ещё и ежедневная практика. В главе про путь запроса TCP был одним абзацем. Здесь он разобран настолько, чтобы выдержать два-три уточняющих вопроса.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>TCP — телефонный звонок: сначала дозвонился, потом говоришь, собеседник переспрашивает, если не расслышал, и слова приходят в том порядке, в каком сказаны. UDP — открытки: бросил в ящик и ушёл. Какая-то может потеряться, а отправленная позже — прийти раньше, и никто тебе об этом не сообщит.</p></div>
+
+  <h2>Где они находятся</h2>
+  <p>IP доставляет пакет от компьютера к компьютеру по IP-адресу и ничего не обещает. TCP и UDP работают уровнем выше, это <span class="term">транспортный уровень</span>. Оба добавляют <span class="term">порт</span> — номер от 0 до 65535, по которому система понимает, какой программе отдать данные. Пара «адрес и порт» называется <span class="term">сокетом</span>; так же называют объект в программе, через который идёт обмен.</p>
+
+  <h2>Сравнение</h2>
+  <div class="tbl"><table>
+    <tr><th></th><th>TCP</th><th>UDP</th></tr>
+    <tr><td>Соединение</td><td>Устанавливается перед обменом</td><td>Нет, пакеты шлются сразу</td></tr>
+    <tr><td>Доставка</td><td>Гарантирована: потерянное пересылается</td><td>Не гарантирована</td></tr>
+    <tr><td>Порядок</td><td>Сохраняется</td><td>Не гарантирован</td></tr>
+    <tr><td>Дубликаты</td><td>Отбрасываются</td><td>Возможны</td></tr>
+    <tr><td>Что видит программа</td><td>Непрерывный поток байтов без границ сообщений</td><td>Отдельные датаграммы: каждая приходит целиком или не приходит</td></tr>
+    <tr><td>Управление скоростью</td><td>Есть: подстраивается под получателя и под сеть</td><td>Нет</td></tr>
+    <tr><td>Заголовок</td><td>От 20 байт</td><td>8 байт</td></tr>
+    <tr><td>Рассылка многим</td><td>Нет, только один на один</td><td>Есть: широковещательная и групповая</td></tr>
+    <tr><td>Где применяют</td><td>HTTP, базы данных, файлы, почта, SSH</td><td>Голос и видео, игры, телеметрия, DNS</td></tr>
+  </table></div>
+
+  <h2>Как TCP добивается надёжности</h2>
+  <p><b>Установка соединения — тройное рукопожатие.</b></p>
+  <ol>
+    <li>Клиент шлёт <code>SYN</code>: «хочу соединиться, мой начальный номер такой-то».</li>
+    <li>Сервер отвечает <code>SYN-ACK</code>: «принял, вот мой начальный номер».</li>
+    <li>Клиент шлёт <code>ACK</code>: «принял». Соединение открыто.</li>
+  </ol>
+  <p>Шагов три, потому что каждая сторона должна и сообщить свой начальный номер, и получить подтверждение, что его услышали. Закрытие идёт через <code>FIN</code> и <code>ACK</code> в каждую сторону.</p>
+  <ul>
+    <li><b>Номера и подтверждения.</b> Каждый байт потока пронумерован. Получатель отвечает <code>ACK</code> с номером следующего ожидаемого байта. По номерам он восстанавливает порядок и отбрасывает дубликаты.</li>
+    <li><b>Повторная отправка.</b> Если подтверждение не пришло за отведённое время, отправитель шлёт данные заново.</li>
+    <li><b>Контрольная сумма.</b> Повреждённый пакет отбрасывается и потом пересылается. У UDP контрольная сумма тоже есть, но повреждённую датаграмму он просто выбрасывает.</li>
+    <li><b>Управление потоком.</b> Получатель сообщает размер своего окна — сколько байтов он готов принять. Отправитель не шлёт больше, чтобы не переполнить его буфер.</li>
+    <li><b>Управление перегрузкой.</b> Отправитель начинает медленно, наращивает скорость, а при потерях резко её сбрасывает. Так TCP не забивает сеть.</li>
+  </ul>
+  <p>Плата за всё это — задержки. Один потерянный пакет останавливает выдачу всех следующих за ним данных, пока его не перешлют. Для звонка это хуже, чем короткий щелчок в звуке.</p>
+
+  <h2>Главная ловушка TCP: поток, а не сообщения</h2>
+  <p>TCP не знает, что такое «сообщение». Отправил два раза по 100 байт — получатель может прочитать 200 одним куском, или 60 и 140, или три куска. Гарантирован только порядок байтов. Границы сообщений программа должна обозначить сама, это называют <span class="term">фреймингом</span>. Два стандартных способа: перед каждым сообщением слать его длину или завершать сообщение разделителем, например переводом строки.</p>
+  <div class="code"><div class="code-head"><span>cpp — Qt: сообщения с длиной в первых четырёх байтах</span></div><pre><code>void Client::onReadyRead() {
+  buffer_.append(socket_-&gt;readAll());              <span class="c">// пришло сколько пришло: копим</span>
+
+  while (true) {
+    if (buffer_.size() &lt; 4) return;                <span class="c">// ещё нет даже длины</span>
+    quint32 length = qFromBigEndian&lt;quint32&gt;(buffer_.constData());
+    if (buffer_.size() &lt; 4 + qsizetype(length)) return;   <span class="c">// сообщение пришло не целиком: ждём</span>
+
+    QByteArray message = buffer_.mid(4, length);
+    buffer_.remove(0, 4 + length);
+    handleMessage(message);                        <span class="c">// в буфере могло лежать несколько сообщений: цикл</span>
+  }
+}</code></pre></div>
+  <p>Ошибка новичка — считать, что один сигнал <code>readyRead</code> равен одному сообщению. На локальной машине так обычно и выходит, поэтому баг проявляется только в настоящей сети.</p>
+  <p><code>qFromBigEndian</code> здесь по делу. Числа в сетевых протоколах принято передавать старшим байтом вперёд (<span class="term">сетевой порядок байтов</span>, big-endian), а процессоры x86 хранят их младшим вперёд. Без преобразования длина 1 прочитается как 16 777 216.</p>
+
+  <h2>UDP: датаграммы</h2>
+  <ul>
+    <li>Каждая отправка — отдельная <span class="term">датаграмма</span>. Она приходит целиком или не приходит совсем, склеек и разрывов нет. Фрейминг не нужен.</li>
+    <li>Надёжность, если она нужна, делает программа: номера пакетов, подтверждения, повторы. Часто потерю просто допускают: устаревший кадр видео никому не нужен.</li>
+    <li>Размер. Теоретический предел данных — 65 507 байт. На практике датаграмму держат в пределах примерно 1 400–1 472 байт, чтобы она помещалась в один пакет сети (MTU Ethernet — 1 500 байт минус заголовки IP и UDP). Иначе IP порежет её на фрагменты, и потеря любого фрагмента уничтожит всю датаграмму.</li>
+    <li>Можно слать сразу многим: всем в подсети (broadcast) или подписавшейся группе (multicast).</li>
+  </ul>
+
+  <h2>Сокеты в Qt</h2>
+  <p>Сетевые классы Qt асинхронные: ничего не ждут, а сообщают о событиях сигналами через цикл событий. Интерфейс при этом не замирает, отдельный поток для сети обычно не нужен.</p>
+  <div class="code"><div class="code-head"><span>cpp — TCP-клиент</span></div><pre><code>socket_ = new QTcpSocket(this);
+connect(socket_, &amp;QTcpSocket::connected,     this, &amp;Client::onConnected);
+connect(socket_, &amp;QTcpSocket::readyRead,     this, &amp;Client::onReadyRead);
+connect(socket_, &amp;QTcpSocket::disconnected,  this, &amp;Client::onDisconnected);
+connect(socket_, &amp;QTcpSocket::errorOccurred, this, &amp;Client::onError);
+
+socket_-&gt;connectToHost("192.168.1.10", 5000);     <span class="c">// возвращается сразу; итог придёт сигналом</span>
+socket_-&gt;write(packet);                           <span class="c">// кладёт в буфер отправки, тоже не ждёт</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>cpp — TCP-сервер</span></div><pre><code>server_ = new QTcpServer(this);
+connect(server_, &amp;QTcpServer::newConnection, this, [this]() {
+  QTcpSocket* client = server_-&gt;nextPendingConnection();   <span class="c">// отдельный сокет на каждого клиента</span>
+  connect(client, &amp;QTcpSocket::readyRead,    this, [this, client]() { read(client); });
+  connect(client, &amp;QTcpSocket::disconnected, client, &amp;QObject::deleteLater);
+});
+server_-&gt;listen(QHostAddress::Any, 5000);</code></pre></div>
+  <div class="code"><div class="code-head"><span>cpp — UDP</span></div><pre><code>udp_ = new QUdpSocket(this);
+udp_-&gt;bind(QHostAddress::AnyIPv4, 6000);          <span class="c">// слушать порт 6000</span>
+
+connect(udp_, &amp;QUdpSocket::readyRead, this, [this]() {
+  while (udp_-&gt;hasPendingDatagrams()) {           <span class="c">// за один сигнал могло накопиться несколько</span>
+    QNetworkDatagram d = udp_-&gt;receiveDatagram();
+    handle(d.data(), d.senderAddress(), d.senderPort());
+  }
+});
+
+udp_-&gt;writeDatagram(payload, QHostAddress("192.168.1.10"), 6000);   <span class="c">// соединения нет: адрес указан в каждой отправке</span></code></pre></div>
+  <div class="box myth"><span class="lbl">Чего не делать</span>
+    <p>Не вызывай в главном потоке блокирующие методы <code>waitForConnected</code> и <code>waitForReadyRead</code>: пока они ждут, окно не перерисовывается и не реагирует на мышь. В обработчике <code>readyRead</code> у UDP читай датаграммы в цикле, иначе непрочитанные останутся в очереди, а новый сигнал может не прийти.</p></div>
+
+  <h2>Как выбрать</h2>
+  <ul>
+    <li><b>TCP</b> — когда нужен каждый байт и в правильном порядке: команды управления, файлы, запросы к базе, HTTP.</li>
+    <li><b>UDP</b> — когда свежесть важнее полноты: звук, видео, координаты и телеметрия, которые через 50 миллисекунд всё равно устареют. И когда нужно разослать данные многим сразу.</li>
+    <li>Частая схема в одном приложении: команды и настройки идут по TCP, поток измерений — по UDP.</li>
+  </ul>
+  <p>Полезно знать: HTTP/3 работает поверх протокола QUIC, а тот построен на UDP и сам реализует надёжность и порядок. Так избавились от главной проблемы TCP, когда одна потеря тормозит все потоки данных в соединении.</p>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Оба протокола транспортного уровня и работают поверх IP. TCP устанавливает соединение тройным рукопожатием SYN, SYN-ACK, ACK и гарантирует доставку и порядок за счёт нумерации байтов, подтверждений и повторной отправки; ещё в нём есть управление потоком и перегрузкой. Для программы это поток байтов без границ сообщений, поэтому нужен фрейминг, например длина перед сообщением. UDP без соединения и без гарантий, зато с минимальными задержками и с границами датаграмм. TCP беру для команд и данных, которые нельзя терять, UDP — для потокового: звук, видео, телеметрия. В Qt это QTcpSocket и QUdpSocket, работаю с ними асинхронно через сигнал readyRead.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Назови три гарантии TCP, которых нет у UDP.</summary><p>Доставка (потерянное пересылается), сохранение порядка, отсутствие дубликатов. Плюс управление потоком и перегрузкой.</p></details>
+    <details class="qa"><summary>Опиши тройное рукопожатие.</summary><p>Клиент шлёт <code>SYN</code>, сервер отвечает <code>SYN-ACK</code>, клиент подтверждает <code>ACK</code>. Стороны обменялись начальными номерами и убедились, что слышат друг друга.</p></details>
+    <details class="qa"><summary>Отправил по TCP два сообщения по 100 байт. Сколько раз получатель прочитает данные?</summary><p>Неизвестно: один раз 200 байт, два раза по 100 или иначе. TCP — поток байтов, границы сообщений нужно обозначать самому.</p></details>
+    <details class="qa"><summary>Что такое фрейминг и как его делают?</summary><p>Способ отделить сообщения друг от друга в потоке байтов: длина перед каждым сообщением или разделитель в конце.</p></details>
+    <details class="qa"><summary>Почему для видеозвонка берут UDP?</summary><p>Задержка хуже потери. TCP при потере пакета задержит все следующие данные до повторной доставки, а опоздавший кадр уже не нужен.</p></details>
+    <details class="qa"><summary>Почему UDP-датаграммы стараются делать не больше примерно 1 400 байт?</summary><p>Чтобы датаграмма помещалась в один сетевой пакет. Большую IP разрежет на фрагменты, и потеря одного уничтожит её всю.</p></details>
+    <details class="qa"><summary>Что такое сетевой порядок байтов?</summary><p>Big-endian: старший байт числа идёт первым. При передаче чисел их приводят к этому порядку, например через <code>qToBigEndian</code> или <code>QDataStream</code>.</p></details>
+    <details class="qa"><summary>Почему в Qt не стоит вызывать <code>waitForReadyRead</code> в главном потоке?</summary><p>Метод блокирует цикл событий, и интерфейс зависает. Правильно подписаться на сигнал <code>readyRead</code>.</p></details>
+  </div>
+  <div class="more"><a href="https://doc.qt.io/qt-6/qtnetwork-programming.html" target="_blank" rel="noopener">Qt: Network Programming (англ.) ↗</a><a href="https://developer.mozilla.org/ru/docs/Glossary/TCP" target="_blank" rel="noopener">MDN: TCP ↗</a></div>
+</section>
+
   </main>
 </div>
 <div class="scrim" id="scrim" hidden></div>
@@ -4224,7 +4895,7 @@ const TRACKS = [
   { id: 'js', title: 'Классический JavaScript', sheet: 'js', plan: ['Типы и приведение', 'Функции, область видимости, замыкания', 'this и контекст', 'Прототипы и классы', 'Асинхронность: колбэки, промисы, async/await', 'Event loop на задачах «что выведет»', 'Модули и сборка'] },
   { id: 'cs', title: 'Computer Science', sheet: 'livecoding', plan: ['Как компьютер хранит числа, текст и объекты', 'Память: стек, куча, ссылки', 'Процессы и потоки', 'Сложность алгоритмов: Big O', 'Структуры данных: массив, хэш-таблица, дерево, граф', 'Базовые алгоритмы: поиск, сортировка, обходы'] },
   { id: 'front', title: 'Фронтенд: освежить', sheet: 'react', plan: ['Как браузер рисует страницу', 'React: рендер, состояние, эффекты', 'TypeScript: система типов', 'CSS: каскад и раскладка', 'Производительность и доступность'] },
-  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'STL и шаблоны', 'Qt: сигналы, слоты, дерево объектов, потоки'] },
+  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt'] },
 ];
 
 const KEY = 'samouchitel:v1';
