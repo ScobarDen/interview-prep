@@ -567,6 +567,7 @@ details.qa > summary::before { content: "?"; font-family: var(--f-display); colo
 details.qa[open] { padding-bottom: 14px; }
 details.qa[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 12px; }
 .qas { display: grid; gap: 8px; }
+details.qa .code { margin: 0 0 14px; }
 .ch-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-top: 1px solid var(--line); padding-top: 18px; margin-top: 14px; }
 .ch-foot a.nx { text-decoration: none; font-weight: 600; font-size: 14.5px; }
 .ch-foot .mk[aria-pressed="true"] { background: var(--good-soft); border-color: var(--good); color: var(--good); font-weight: 600; }
@@ -4499,6 +4500,219 @@ thread-&gt;start();</code></pre></div>
   </div>
 </section>
 
+<section class="chapter" data-id="cpp-13" data-track="cpp" data-min="15" hidden>
+  <h1>Qt на практике: виджеты, компоновки, строки, события, модели</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Глава про сигналы и слоты объясняла, как Qt устроен внутри. Эта — про то, из чего собирают обычное окно и о чём спрашивают человека, которого берут «на Qt»: чем <code>QMainWindow</code> отличается от <code>QDialog</code>, как работают компоновки, что такое <code>QString</code>, как обработать нажатие клавиши и как показать таблицу на сто тысяч строк. Всё одинаково в Qt 5 и Qt 6.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Qt Widgets — это DOM, только на C++. Виджет — элемент, дерево «родитель и дети» — дерево DOM, компоновка — flexbox и grid, QSS — CSS, события всплывают от ребёнка к родителю. Отличие одно: всё типизировано и собирается компилятором.</p></div>
+
+  <h2>Скелет приложения</h2>
+  <div class="code"><div class="code-head"><span>cpp — main.cpp</span></div><pre><code>#include &lt;QApplication&gt;
+#include "mainwindow.h"
+
+int main(int argc, char* argv[]) {
+  QApplication app(argc, argv);   <span class="c">// один на программу: настройки, шрифты, цикл событий</span>
+  MainWindow window;              <span class="c">// на стеке: проживёт до конца main</span>
+  window.show();                  <span class="c">// показать; окно ещё не нарисовано</span>
+  return app.exec();              <span class="c">// запустить цикл событий и ждать закрытия окон</span>
+}</code></pre></div>
+  <p>До <code>app.exec()</code> ничего не рисуется и ни один сигнал от пользователя не придёт: всё это делает цикл событий. Для программ без окон вместо <code>QApplication</code> берут <code>QCoreApplication</code>.</p>
+
+  <h2>Три вида окон</h2>
+  <div class="tbl"><table>
+    <tr><th>Класс</th><th>Что это</th></tr>
+    <tr><td><code>QWidget</code></td><td>Базовый класс всего видимого. Без родителя становится отдельным окном, с родителем — частью его области</td></tr>
+    <tr><td><code>QMainWindow</code></td><td>Главное окно с готовой разметкой: меню, панели инструментов, строка состояния, прикрепляемые панели (<code>QDockWidget</code>) и центральный виджет</td></tr>
+    <tr><td><code>QDialog</code></td><td>Диалог. <code>exec()</code> показывает его модально и возвращает результат (принят или отклонён), <code>show()</code> — немодально</td></tr>
+  </table></div>
+  <p><span class="term">Модальный</span> диалог блокирует остальные окна программы, пока его не закроют. <code>dialog.exec()</code> запускает вложенный цикл событий, поэтому код после него выполнится только после закрытия диалога.</p>
+
+  <h2>Компоновки</h2>
+  <p>Координаты и размеры вручную не задают. Виджеты кладут в <span class="term">компоновку</span> (layout), и она сама расставляет их и пересчитывает при изменении размера окна.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>auto* form = new QFormLayout;                 <span class="c">// пары «подпись — поле»</span>
+form-&gt;addRow("Частота, МГц:", freqEdit_);
+form-&gt;addRow("Полоса, кГц:",  bandEdit_);
+
+auto* buttons = new QHBoxLayout;              <span class="c">// в ряд</span>
+buttons-&gt;addStretch();                        <span class="c">// пружина: прижать кнопки вправо</span>
+buttons-&gt;addWidget(startButton_);
+buttons-&gt;addWidget(stopButton_);
+
+auto* root = new QVBoxLayout(this);           <span class="c">// в столбик; this — виджет, которому ставим компоновку</span>
+root-&gt;addLayout(form);
+root-&gt;addWidget(plot_, 1);                    <span class="c">// 1 — коэффициент растяжения: график забирает свободное место</span>
+root-&gt;addLayout(buttons);</code></pre></div>
+  <ul>
+    <li>Четыре компоновки: <code>QHBoxLayout</code> (ряд), <code>QVBoxLayout</code> (столбик), <code>QGridLayout</code> (сетка), <code>QFormLayout</code> (форма).</li>
+    <li><b>Коэффициент растяжения</b> работает как <code>flex-grow</code>. <b>Политика размера</b> виджета (<code>QSizePolicy</code>) говорит, готов ли он растягиваться и сжиматься: кнопка по высоте фиксирована, текстовое поле растягивается.</li>
+    <li><b>Память.</b> Когда компоновка установлена на виджет, все добавленные в неё виджеты становятся его детьми. Поэтому <code>new QPushButton</code> без <code>delete</code> здесь корректен.</li>
+    <li>То же самое рисуют мышкой в Qt Designer. Он сохраняет файл <code>.ui</code>, из которого uic генерирует класс, а в конструкторе окна его подключают строкой <code>ui-&gt;setupUi(this)</code>.</li>
+  </ul>
+
+  <h2>QString и QByteArray</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>QString name = "Канал";
+QString text = QString("%1: %2 МГц").arg(name).arg(433.92, 0, 'f', 2);   <span class="c">// "Канал: 433.92 МГц"</span>
+
+bool ok = false;
+double freq = freqEdit_-&gt;text().toDouble(&amp;ok);     <span class="c">// ok == false, если в поле не число</span>
+if (!ok) { ... }
+
+QStringList parts = line.split(';');
+QString clean = parts.value(0).trimmed();          <span class="c">// value() не падает на несуществующем индексе</span>
+
+std::string s = text.toStdString();                <span class="c">// в std и обратно</span>
+QString back = QString::fromStdString(s);
+
+label-&gt;setText(tr("Запущено"));                    <span class="c">// tr() помечает строку для перевода интерфейса</span></code></pre></div>
+  <ul>
+    <li><code>QString</code> хранит текст в UTF-16 и корректно работает с кириллицей. <code>std::string</code> — просто байты без знания о кодировке.</li>
+    <li><code>QByteArray</code> — массив байтов: то, что приходит из сокета или файла. Превращение в текст — явное: <code>QString::fromUtf8(bytes)</code>.</li>
+    <li>Преобразования строки в число возвращают признак успеха через параметр <code>ok</code>. Не проверить его — частая ошибка в обработке пользовательского ввода.</li>
+  </ul>
+
+  <h2>Контейнеры Qt и неявное разделение</h2>
+  <p>У Qt свои контейнеры: <code>QVector</code> и <code>QList</code> (как <code>std::vector</code>), <code>QMap</code> (упорядоченный, как <code>std::map</code>), <code>QHash</code> (как <code>std::unordered_map</code>), <code>QSet</code>. API Qt принимает и возвращает их, поэтому в коде интерфейса они встречаются постоянно. В ядре без Qt используют <code>std</code>.</p>
+  <p>Главное отличие — <span class="term">неявное разделение</span> (implicit sharing, copy-on-write). Копия <code>QString</code>, <code>QVector</code>, <code>QImage</code> не копирует данные: обе переменные ссылаются на один блок и счётчик ссылок. Настоящая копия делается в момент, когда одну из них меняют. Поэтому такие объекты дёшево передавать по значению и через сигналы между потоками.</p>
+  <div class="box myth"><span class="lbl">Ловушка с циклом</span>
+    <p><code>for (auto&amp; x : list_)</code> по неконстантному контейнеру Qt вызывает неконстантный <code>begin()</code>, и если данные разделены с другой копией, контейнер молча скопируется целиком. Для чтения перебирай константный контейнер: <code>for (const auto&amp; x : std::as_const(list_))</code>, в Qt 5 то же делает <code>qAsConst</code>.</p></div>
+  <p><code>QVariant</code> — контейнер для значения любого зарегистрированного типа, аналог <code>std::any</code>. На нём построены модели, свойства и настройки: <code>QVariant v = 42; v.toInt(); v.toString();</code>.</p>
+
+  <h2>События</h2>
+  <p>Сигнал — это сообщение «у меня что-то произошло» от объекта всем желающим. <span class="term">Событие</span> — сообщение от системы конкретному объекту: нажата клавиша, нужно перерисоваться, изменился размер. События обрабатывают переопределением виртуальных методов.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class PlotWidget : public QWidget {
+protected:
+  void paintEvent(QPaintEvent*) override {          <span class="c">// рисовать можно только здесь</span>
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.drawPolyline(points_.data(), points_.size());
+  }
+  void mousePressEvent(QMouseEvent* e) override {
+    if (e-&gt;button() == Qt::LeftButton) selectAt(e-&gt;pos());
+    else QWidget::mousePressEvent(e);               <span class="c">// не наше: отдать базовому классу</span>
+  }
+  void keyPressEvent(QKeyEvent* e) override {
+    if (e-&gt;key() == Qt::Key_Escape) clearSelection();
+    else e-&gt;ignore();                               <span class="c">// не обработали: событие уйдёт родителю</span>
+  }
+  void closeEvent(QCloseEvent* e) override {
+    if (hasUnsaved() &amp;&amp; !confirmClose()) e-&gt;ignore();   <span class="c">// отменить закрытие окна</span>
+    else e-&gt;accept();
+  }
+};</code></pre></div>
+  <ul>
+    <li><b>Всплытие.</b> Необработанное событие мыши или клавиатуры (<code>ignore()</code>) передаётся родительскому виджету, как всплытие в DOM.</li>
+    <li><b>Перерисовка.</b> Чтобы виджет перерисовался, вызывают <code>update()</code>: он ставит запрос в очередь, и несколько вызовов подряд сольются в одну перерисовку. <code>repaint()</code> рисует немедленно и нужен крайне редко. Напрямую <code>paintEvent</code> не вызывают.</li>
+    <li><b>Фильтр событий.</b> <code>target-&gt;installEventFilter(this)</code> позволяет перехватывать события чужого объекта в своём методе <code>eventFilter</code>, не наследуясь от него. Вернул <code>true</code> — событие съедено.</li>
+  </ul>
+
+  <h2>Таймеры</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>auto* timer = new QTimer(this);
+connect(timer, &amp;QTimer::timeout, this, &amp;Panel::refresh);
+timer-&gt;start(100);                                   <span class="c">// каждые 100 мс, как setInterval</span>
+
+QTimer::singleShot(500, this, [this]() { hint_-&gt;hide(); });   <span class="c">// один раз, как setTimeout</span></code></pre></div>
+  <p>Таймер срабатывает через цикл событий. Если главный поток занят долгим расчётом, таймеры не тикают, окно не перерисовывается, и система помечает программу как зависшую. Долгую работу выносят в поток, а «починка» вызовом <code>QApplication::processEvents()</code> посреди расчёта считается плохим признаком.</p>
+
+  <h2>Свойства и метаобъекты</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class Channel : public QObject {
+  Q_OBJECT
+  Q_PROPERTY(double level READ level WRITE setLevel NOTIFY levelChanged)
+public:
+  double level() const { return level_; }
+  void setLevel(double v) {
+    if (qFuzzyCompare(level_, v)) return;   <span class="c">// не изменилось — не шлём сигнал, иначе возможен бесконечный круг</span>
+    level_ = v;
+    emit levelChanged(v);
+  }
+signals:
+  void levelChanged(double);
+private:
+  double level_ = 0.0;
+};</code></pre></div>
+  <p><code>Q_PROPERTY</code> объявляет свойство, доступное по имени во время работы: его видят QML, Qt Designer, анимации и таблицы стилей. Проверка «значение не изменилось» в сеттере обязательна. <code>qobject_cast&lt;Channel*&gt;(obj)</code> — безопасное приведение для наследников <code>QObject</code>: вернёт <code>nullptr</code>, если тип не тот, и работает без RTTI.</p>
+
+  <h2>Model/View подробнее</h2>
+  <p>Простой путь — <code>QTableWidget</code>: таблица, которая хранит данные в себе, по объекту на ячейку. Годится для десятков строк. Для больших и меняющихся данных пишут свою модель: данные остаются в твоей структуре, а представление спрашивает только то, что видно на экране.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class SignalModel : public QAbstractTableModel {
+  Q_OBJECT
+public:
+  int rowCount(const QModelIndex&amp; = {}) const override { return items_.size(); }
+  int columnCount(const QModelIndex&amp; = {}) const override { return 2; }
+
+  QVariant data(const QModelIndex&amp; index, int role) const override {
+    if (!index.isValid()) return {};
+    const Signal&amp; s = items_.at(index.row());
+    if (role == Qt::DisplayRole)                           <span class="c">// текст ячейки</span>
+      return index.column() == 0 ? QVariant(s.freq) : QVariant(s.level);
+    if (role == Qt::ForegroundRole &amp;&amp; s.level &gt; -60)       <span class="c">// цвет текста</span>
+      return QColor(Qt::red);
+    return {};
+  }
+
+  QVariant headerData(int section, Qt::Orientation o, int role) const override {
+    if (o != Qt::Horizontal || role != Qt::DisplayRole) return {};
+    return section == 0 ? tr("Частота") : tr("Уровень");
+  }
+
+  void append(const Signal&amp; s) {
+    beginInsertRows({}, items_.size(), items_.size());     <span class="c">// предупредить представление</span>
+    items_.push_back(s);
+    endInsertRows();                                       <span class="c">// можно перерисовываться</span>
+  }
+private:
+  QVector&lt;Signal&gt; items_;
+};
+
+view-&gt;setModel(model);                                     <span class="c">// QTableView</span></code></pre></div>
+  <ul>
+    <li><b>Роли.</b> Один и тот же <code>data()</code> отвечает на разные вопросы о ячейке: что показать (<code>DisplayRole</code>), что редактировать (<code>EditRole</code>), подсказка, цвет, выравнивание, состояние флажка.</li>
+    <li><b>Уведомления обязательны.</b> Менять данные нужно между <code>beginInsertRows</code> и <code>endInsertRows</code> (или <code>beginRemoveRows</code>, <code>beginResetModel</code>), а изменение значения сопровождать сигналом <code>dataChanged</code>. Иначе представление покажет старое или упадёт.</li>
+    <li><b>Сортировка и фильтр</b> — <code>QSortFilterProxyModel</code>: прослойка между моделью и представлением, сама модель не меняется.</li>
+    <li><b>Делегат</b> (<code>QStyledItemDelegate</code>) отвечает за отрисовку и редактор ячейки, когда стандартных не хватает: полоса прогресса, выпадающий список.</li>
+    <li>Для редактирования переопределяют <code>setData</code> и <code>flags</code> (вернуть <code>Qt::ItemIsEditable</code>).</li>
+  </ul>
+
+  <h2>Что ещё назвать одной строкой</h2>
+  <ul>
+    <li><b>QSS</b> — таблицы стилей с синтаксисом CSS: <code>QPushButton:hover { background: #2350C8; }</code>.</li>
+    <li><b><code>QSettings</code></b> — сохранение настроек: реестр на Windows, файл в <code>~/.config</code> на Linux.</li>
+    <li><b>Ресурсы</b> — файл <code>.qrc</code> встраивает иконки и переводы в исполняемый файл, путь начинается с <code>:/</code>.</li>
+    <li><b><code>QtConcurrent::run</code> и <code>QFutureWatcher</code></b> — запустить функцию в пуле потоков и получить сигнал о готовности, без ручного <code>QThread</code>.</li>
+    <li><b><code>deleteLater()</code></b> — безопасное удаление <code>QObject</code>: объект удалится, когда управление вернётся в цикл событий, а не посреди обработки его же сигнала.</li>
+  </ul>
+
+  <div class="box ai"><span class="lbl">Когда читаешь код Qt от агента</span>
+    <ul>
+      <li>Долгая операция или <code>waitFor...</code> в слоте главного потока.</li>
+      <li>Данные модели меняются без <code>begin...</code> и <code>end...</code>.</li>
+      <li>Сеттер свойства шлёт сигнал, не проверив, изменилось ли значение.</li>
+      <li>Виджет создан через <code>new</code> без родителя и без компоновки — утечка.</li>
+      <li>Результат <code>toInt()</code> или <code>toDouble()</code> используется без проверки <code>ok</code>.</li>
+      <li>Рисование через <code>QPainter</code> вне <code>paintEvent</code>.</li>
+    </ul></div>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Интерфейс на Qt Widgets — дерево виджетов, размеры которых считают компоновки, а не ручные координаты. QMainWindow даёт меню, панели и центральный виджет, QDialog — модальные окна через exec. Действия пользователя приходят двумя путями: сигналами от готовых виджетов и событиями, которые я обрабатываю переопределением paintEvent, mousePressEvent и других; необработанное событие всплывает к родителю. Большие таблицы делаю через свою модель на QAbstractTableModel: представление запрашивает только видимые ячейки по ролям, а об изменениях модель сообщает через beginInsertRows и dataChanged. Тяжёлую работу выношу из главного потока, иначе цикл событий встаёт и окно зависает.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Что делает <code>app.exec()</code>?</summary><p>Запускает цикл событий: принимает события системы, рассылает их объектам, вызывает слоты и таймеры. Возвращается при завершении программы.</p></details>
+    <details class="qa"><summary>Чем <code>dialog.exec()</code> отличается от <code>dialog.show()</code>?</summary><p><code>exec()</code> показывает диалог модально, блокирует остальные окна и возвращает результат после закрытия. <code>show()</code> показывает немодально и возвращается сразу.</p></details>
+    <details class="qa"><summary>Кто удаляет кнопку, добавленную в компоновку?</summary><p>Виджет, на который установлена компоновка: кнопка становится его ребёнком и удаляется вместе с ним.</p></details>
+    <details class="qa"><summary>Что такое неявное разделение?</summary><p>Копия объекта не копирует данные, а разделяет их с оригиналом по счётчику ссылок. Настоящая копия создаётся при первой попытке изменить.</p></details>
+    <details class="qa"><summary>Чем событие отличается от сигнала?</summary><p>Событие приходит от системы конкретному объекту и обрабатывается переопределением виртуального метода. Сигнал испускает объект, и его получают все подключённые слоты.</p></details>
+    <details class="qa"><summary>Чем <code>update()</code> отличается от <code>repaint()</code>?</summary><p><code>update()</code> ставит запрос на перерисовку в очередь, несколько запросов сливаются. <code>repaint()</code> рисует сразу.</p></details>
+    <details class="qa"><summary>Что такое роль в модели?</summary><p>Параметр, который уточняет, что именно представление хочет знать о ячейке: текст, значение для редактирования, цвет, подсказку.</p></details>
+    <details class="qa"><summary>Что нужно сделать при добавлении строки в модель?</summary><p>Вызвать <code>beginInsertRows</code>, изменить данные, вызвать <code>endInsertRows</code>.</p></details>
+    <details class="qa"><summary>Как добавить в таблицу сортировку и фильтр, не меняя модель?</summary><p>Поставить между моделью и представлением <code>QSortFilterProxyModel</code>.</p></details>
+    <details class="qa"><summary>Почему сеттер свойства проверяет, изменилось ли значение?</summary><p>Чтобы не слать лишние сигналы и не получить бесконечный круг, когда два объекта обновляют друг друга.</p></details>
+    <details class="qa"><summary>Окно зависает на время расчёта. Почему и что делать?</summary><p>Расчёт идёт в главном потоке и не даёт работать циклу событий. Вынести его в поток (<code>QThread</code>, <code>QtConcurrent::run</code>) и вернуть результат сигналом.</p></details>
+  </div>
+  <div class="more"><a href="https://doc.qt.io/qt-5/model-view-programming.html" target="_blank" rel="noopener">Qt 5: Model/View Programming (англ.) ↗</a><a href="https://doc.qt.io/qt-5/layout.html" target="_blank" rel="noopener">Qt 5: Layout Management (англ.) ↗</a></div>
+</section>
+
 <section class="chapter" data-id="cpp-7" data-track="cpp" data-min="14" hidden>
   <h1>Алгоритмы на C++: бинарный поиск и сортировки руками</h1>
   <div class="box why"><span class="lbl">Зачем это</span>
@@ -5350,6 +5564,371 @@ def test_float_result():
   <div class="more"><a href="https://docs.python.org/ru/3/tutorial/" target="_blank" rel="noopener">Официальный учебник Python на русском ↗</a><a href="https://numpy.org/doc/stable/user/absolute_beginners.html" target="_blank" rel="noopener">NumPy: the absolute basics for beginners (англ.) ↗</a></div>
 </section>
 
+<section class="chapter" data-id="cpp-14" data-track="cpp" data-min="60" hidden>
+  <h1>Тренажёр: 16 задач, которые пишут руками</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Прочитанный алгоритм забывается за день, написанный руками — остаётся. Здесь задачи того уровня, который дают на собесе по C++ у доски или в редакторе: короткие, на 5–15 минут каждая. Это не глава для чтения, а тетрадь для работы.</p></div>
+
+  <div class="box model"><span class="lbl">Как заниматься</span>
+    <ol>
+      <li>Прочитай условие и <b>не открывай решение</b>.</li>
+      <li>Напиши код на листке или в пустом редакторе без подсказок. Засеки время: 10–15 минут на задачу.</li>
+      <li>Проверь на пустом входе, одном элементе и обычном случае. Назови сложность вслух.</li>
+      <li>Только потом открой решение и сравни. Не получилось — закрой и повтори завтра.</li>
+    </ol>
+    <p>Если времени мало, сделай задачи 1, 4, 5, 8, 9, 11, 13 и 15: они покрывают основные приёмы.</p></div>
+
+  <h2>Строки и массивы</h2>
+
+  <h3>1. Развернуть строку на месте</h3>
+  <p>Дана строка. Развернуть её, не создавая вторую строку. <code>"abcd"</code> → <code>"dcba"</code>.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>void reverse(std::string&amp; s) {
+  if (s.empty()) return;
+  std::size_t i = 0, j = s.size() - 1;
+  while (i &lt; j) {
+    std::swap(s[i], s[j]);
+    ++i;
+    --j;
+  }
+}</code></pre></div>
+    <p>Приём «два указателя»: идём с двух концов навстречу. O(n) по времени, O(1) по памяти. Проверка на пустую строку обязательна: <code>size() - 1</code> у беззнакового типа на пустой строке даст огромное число. В работе: <code>std::reverse(s.begin(), s.end())</code>.</p>
+  </details>
+
+  <h3>2. Палиндром</h3>
+  <p>Проверить, читается ли строка одинаково в обе стороны. Регистр и всё, кроме букв и цифр, игнорировать. <code>"A man, a plan, a canal: Panama"</code> → <code>true</code>. Считаем, что текст в ASCII.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>bool isPalindrome(const std::string&amp; s) {
+  int i = 0;
+  int j = static_cast&lt;int&gt;(s.size()) - 1;
+  while (i &lt; j) {
+    unsigned char a = s[i], b = s[j];
+    if (!std::isalnum(a)) { ++i; continue; }       <span class="c">// пропустить не букву и не цифру слева</span>
+    if (!std::isalnum(b)) { --j; continue; }       <span class="c">// и справа</span>
+    if (std::tolower(a) != std::tolower(b)) return false;
+    ++i;
+    --j;
+  }
+  return true;
+}</code></pre></div>
+    <p>Снова два указателя, O(n) и O(1). Здесь индексы знаковые, поэтому пустая строка обрабатывается сама. <code>unsigned char</code> нужен, потому что <code>std::isalnum</code> от отрицательного <code>char</code> — неопределённое поведение. Уточняющий вопрос интервьюеру, который стоит задать: «только ASCII или Юникод?».</p>
+  </details>
+
+  <h3>3. Максимум и второй максимум за один проход</h3>
+  <p>Дан вектор целых чисел, в нём не меньше двух элементов. Найти наибольшее и второе по величине значение, не сортируя. Для <code>{5, 1, 9, 9, 3}</code> ответ 9 и 9.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::pair&lt;int, int&gt; topTwo(const std::vector&lt;int&gt;&amp; v) {
+  int first = std::max(v[0], v[1]);
+  int second = std::min(v[0], v[1]);
+  for (std::size_t i = 2; i &lt; v.size(); ++i) {
+    if (v[i] &gt; first) {
+      second = first;          <span class="c">// прежний лидер становится вторым</span>
+      first = v[i];
+    } else if (v[i] &gt; second) {
+      second = v[i];
+    }
+  }
+  return {first, second};
+}</code></pre></div>
+    <p>O(n), O(1). Сортировка дала бы O(n log n) ради двух чисел. Уточни заранее, считать ли равные значения: если нужен второй <i>различный</i> максимум, во второй ветке добавляется условие <code>v[i] != first</code>, а начальные значения надо выбирать иначе.</p>
+  </details>
+
+  <h3>4. Есть ли дубликаты</h3>
+  <p>Вернуть <code>true</code>, если в векторе есть хотя бы два одинаковых числа.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>bool hasDuplicates(const std::vector&lt;int&gt;&amp; v) {
+  std::unordered_set&lt;int&gt; seen;
+  for (int x : v) {
+    if (!seen.insert(x).second) return true;   <span class="c">// insert вернул false: такой элемент уже был</span>
+  }
+  return false;
+}</code></pre></div>
+    <p>O(n) по времени, O(n) по памяти. Три варианта, которые стоит назвать: перебор всех пар O(n²) без памяти; сортировка и сравнение соседей O(n log n); хэш-множество O(n) с памятью. Умение перечислить варианты и их цену ценится выше, чем сам код.</p>
+  </details>
+
+  <h3>5. Два числа с заданной суммой</h3>
+  <p>Дан вектор и число <code>target</code>. Вернуть индексы двух элементов, сумма которых равна <code>target</code>, или пустой результат. Для <code>{2, 7, 11, 15}</code> и 9 ответ 0 и 1.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::optional&lt;std::pair&lt;int, int&gt;&gt; twoSum(const std::vector&lt;int&gt;&amp; v, int target) {
+  std::unordered_map&lt;int, int&gt; indexOf;                <span class="c">// значение → индекс</span>
+  for (int i = 0; i &lt; static_cast&lt;int&gt;(v.size()); ++i) {
+    auto it = indexOf.find(target - v[i]);             <span class="c">// встречалась ли уже нужная пара?</span>
+    if (it != indexOf.end()) return std::make_pair(it-&gt;second, i);
+    indexOf[v[i]] = i;
+  }
+  return std::nullopt;
+}</code></pre></div>
+    <p>Самая известная задача собесов. Перебор пар — O(n²). Идея ускорения: для каждого числа нужное второе известно заранее, это <code>target - x</code>, и его наличие проверяется в хэш-таблице за O(1). Итог O(n) по времени и памяти. Если массив отсортирован, решается двумя указателями с концов без дополнительной памяти.</p>
+  </details>
+
+  <h3>6. Анаграммы</h3>
+  <p>Проверить, состоят ли две строки из одних и тех же букв в одинаковом количестве. <code>"listen"</code> и <code>"silent"</code> → <code>true</code>. Буквы латинские строчные.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>bool isAnagram(const std::string&amp; a, const std::string&amp; b) {
+  if (a.size() != b.size()) return false;
+  std::array&lt;int, 26&gt; count{};                 <span class="c">// {} обнуляет счётчики</span>
+  for (char c : a) ++count[c - 'a'];
+  for (char c : b) --count[c - 'a'];
+  for (int n : count) if (n != 0) return false;
+  return true;
+}</code></pre></div>
+    <p>Подсчёт частот: O(n) по времени, O(1) по памяти, потому что алфавит фиксирован. Вариант проще: отсортировать обе строки и сравнить, O(n log n). Для произвольных символов вместо массива берут <code>unordered_map&lt;char, int&gt;</code>.</p>
+  </details>
+
+  <h3>7. Слить два отсортированных массива</h3>
+  <p>Даны два вектора, каждый отсортирован по возрастанию. Вернуть один отсортированный вектор со всеми элементами.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::vector&lt;int&gt; merge(const std::vector&lt;int&gt;&amp; a, const std::vector&lt;int&gt;&amp; b) {
+  std::vector&lt;int&gt; out;
+  out.reserve(a.size() + b.size());             <span class="c">// одна аллокация вместо нескольких</span>
+  std::size_t i = 0, j = 0;
+  while (i &lt; a.size() &amp;&amp; j &lt; b.size()) {
+    if (b[j] &lt; a[i]) out.push_back(b[j++]);
+    else             out.push_back(a[i++]);
+  }
+  while (i &lt; a.size()) out.push_back(a[i++]);   <span class="c">// хвост одного из массивов</span>
+  while (j &lt; b.size()) out.push_back(b[j++]);
+  return out;
+}</code></pre></div>
+    <p>Это шаг слияния из сортировки слиянием. O(n + m). Про <code>reserve</code> скажи вслух: он показывает, что ты понимаешь, как растёт <code>vector</code>. В работе: <code>std::merge</code>.</p>
+  </details>
+
+  <h3>8. Убрать дубликаты из отсортированного массива на месте</h3>
+  <p>Дан отсортированный вектор. Оставить по одному экземпляру каждого значения без дополнительного массива. <code>{1, 1, 2, 3, 3, 3}</code> → <code>{1, 2, 3}</code>.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>void removeDuplicates(std::vector&lt;int&gt;&amp; v) {
+  if (v.empty()) return;
+  std::size_t write = 1;                          <span class="c">// куда писать следующий уникальный</span>
+  for (std::size_t read = 1; read &lt; v.size(); ++read) {
+    if (v[read] != v[write - 1]) {
+      v[write] = v[read];
+      ++write;
+    }
+  }
+  v.resize(write);                                <span class="c">// отрезать хвост</span>
+}</code></pre></div>
+    <p>Два указателя в одну сторону: быстрый читает, медленный пишет. O(n), O(1). В работе это идиома <code>v.erase(std::unique(v.begin(), v.end()), v.end())</code>. Объясни её: <code>std::unique</code> сдвигает уникальные элементы в начало и возвращает итератор на новый конец, но размер контейнера не меняет; лишнее отрезает <code>erase</code>.</p>
+  </details>
+
+  <h2>Поиск, список, стек</h2>
+
+  <h3>9. Первое вхождение в отсортированном массиве</h3>
+  <p>В отсортированном векторе с повторами найти индекс первого элемента, равного <code>target</code>, или −1. Для <code>{1, 2, 2, 2, 5}</code> и 2 ответ 1. Требование: O(log n).</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>int firstEqual(const std::vector&lt;int&gt;&amp; a, int target) {
+  int lo = 0;
+  int hi = static_cast&lt;int&gt;(a.size());        <span class="c">// полуинтервал [lo, hi): hi не включён</span>
+  while (lo &lt; hi) {
+    int mid = lo + (hi - lo) / 2;
+    if (a[mid] &lt; target) lo = mid + 1;        <span class="c">// всё до mid включительно меньше — отбросить</span>
+    else                 hi = mid;            <span class="c">// a[mid] &gt;= target: ответ здесь или левее</span>
+  }
+  if (lo &lt; static_cast&lt;int&gt;(a.size()) &amp;&amp; a[lo] == target) return lo;
+  return -1;
+}</code></pre></div>
+    <p>Обычный бинарный поиск вернёт любое из трёх вхождений. Здесь при равенстве мы не останавливаемся, а продолжаем искать левее. Цикл находит первый элемент, который не меньше <code>target</code>: это ровно <code>std::lower_bound</code>. Обрати внимание на другую схему границ: полуинтервал, условие <code>lo &lt; hi</code>, сдвиг <code>hi = mid</code>.</p>
+  </details>
+
+  <h3>10. Развернуть односвязный список</h3>
+  <p>Дан указатель на голову списка. Развернуть список и вернуть новую голову.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>struct Node {
+  int value;
+  Node* next;
+};
+
+Node* reverse(Node* head) {
+  Node* prev = nullptr;
+  while (head != nullptr) {
+    Node* next = head-&gt;next;   <span class="c">// запомнить, куда идти дальше</span>
+    head-&gt;next = prev;         <span class="c">// развернуть стрелку</span>
+    prev = head;               <span class="c">// сдвинуть оба указателя</span>
+    head = next;
+  }
+  return prev;                 <span class="c">// последний обработанный узел — новая голова</span>
+}</code></pre></div>
+    <p>Три указателя, O(n) и O(1). Главное — сохранить <code>next</code> до того, как перезапишешь <code>head-&gt;next</code>, иначе хвост списка потерян. Нарисуй три узла на бумаге и пройди цикл руками: эту задачу проще показать картинкой.</p>
+  </details>
+
+  <h3>11. Правильность скобок</h3>
+  <p>Строка состоит из скобок <code>()[]{}</code>. Проверить, что каждая открытая закрыта скобкой того же вида и в правильном порядке. <code>"{[()]}"</code> → <code>true</code>, <code>"([)]"</code> → <code>false</code>.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>bool isBalanced(const std::string&amp; s) {
+  std::stack&lt;char&gt; open;
+  for (char c : s) {
+    if (c == '(' || c == '[' || c == '{') {
+      open.push(c);
+      continue;
+    }
+    if (open.empty()) return false;              <span class="c">// закрывающая без пары</span>
+    char top = open.top();
+    open.pop();
+    if ((c == ')' &amp;&amp; top != '(') ||
+        (c == ']' &amp;&amp; top != '[') ||
+        (c == '}' &amp;&amp; top != '{')) return false;
+  }
+  return open.empty();                           <span class="c">// не осталось ли незакрытых</span>
+}</code></pre></div>
+    <p>Классическая задача на стек: последняя открытая скобка должна закрыться первой. O(n) по времени и памяти. Две ошибки, которые делают чаще всего: вызвать <code>top()</code> на пустом стеке и забыть проверку в конце.</p>
+  </details>
+
+  <h3>12. Число Фибоначчи</h3>
+  <p>Вернуть n-е число Фибоначчи: 0, 1, 1, 2, 3, 5, 8… Сначала напиши рекурсию, потом объясни, чем она плоха, и перепиши.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::uint64_t fibSlow(int n) {                 <span class="c">// O(2^n): одно и то же считается много раз</span>
+  return n &lt; 2 ? n : fibSlow(n - 1) + fibSlow(n - 2);
+}
+
+std::uint64_t fib(int n) {                     <span class="c">// O(n) времени, O(1) памяти</span>
+  std::uint64_t prev = 0, cur = 1;
+  for (int i = 0; i &lt; n; ++i) {
+    std::uint64_t next = prev + cur;
+    prev = cur;
+    cur = next;
+  }
+  return prev;
+}</code></pre></div>
+    <p>Наивная рекурсия для n = 50 делает миллиарды вызовов, потому что заново считает одни и те же значения. Цикл хранит только два последних числа. Скажи про переполнение: <code>uint64_t</code> хватает до 93-го числа. Этот переход от рекурсии к хранению посчитанного называется динамическим программированием.</p>
+  </details>
+
+  <h2>Числа и сигналы</h2>
+
+  <h3>13. Скользящее среднее</h3>
+  <p>Написать класс: в него по одному приходят значения, а метод возвращает среднее последних <code>k</code> значений. Каждое добавление должно работать за O(1).</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>class MovingAverage {
+public:
+  explicit MovingAverage(std::size_t k) : k_(k) {}
+
+  double add(double x) {
+    window_.push_back(x);
+    sum_ += x;
+    if (window_.size() &gt; k_) {       <span class="c">// окно переполнено: убрать самое старое</span>
+      sum_ -= window_.front();
+      window_.pop_front();
+    }
+    return sum_ / static_cast&lt;double&gt;(window_.size());
+  }
+
+private:
+  std::size_t k_;
+  std::deque&lt;double&gt; window_;
+  double sum_ = 0.0;
+};</code></pre></div>
+    <p>Идея: не пересчитывать сумму окна заново, а прибавить пришедшее и вычесть ушедшее. <code>std::deque</code> даёт O(1) на добавление в конец и удаление из начала. Вопрос на засыпку: при очень длинной работе в <code>sum_</code> копится ошибка округления, поэтому сумму иногда пересчитывают с нуля. Вместо <code>deque</code> можно взять кольцевой буфер.</p>
+  </details>
+
+  <h3>14. Медианный фильтр</h3>
+  <p>Дан вектор отсчётов и нечётный размер окна <code>w</code>. Вернуть вектор той же длины, где каждый элемент заменён медианой окна с центром в нём. На краях окно обрезается. Для <code>{1, 1, 100, 1, 1}</code> и <code>w = 3</code> ответ <code>{1, 1, 1, 1, 1}</code>.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>std::vector&lt;double&gt; medianFilter(const std::vector&lt;double&gt;&amp; in, int w) {
+  const int n = static_cast&lt;int&gt;(in.size());
+  const int half = w / 2;
+  std::vector&lt;double&gt; out(n);
+  std::vector&lt;double&gt; window;
+  for (int i = 0; i &lt; n; ++i) {
+    int from = std::max(0, i - half);
+    int to = std::min(n - 1, i + half);                    <span class="c">// включительно</span>
+    window.assign(in.begin() + from, in.begin() + to + 1); <span class="c">// копия окна</span>
+    auto mid = window.begin() + window.size() / 2;
+    std::nth_element(window.begin(), mid, window.end());
+    out[i] = *mid;
+  }
+  return out;
+}</code></pre></div>
+    <p>Для каждого отсчёта копируем окно и находим его середину через <code>nth_element</code>. Сложность O(n · w). Результат пишется в отдельный вектор: фильтровать на месте нельзя, уже заменённые значения попали бы в следующие окна. На краях окно выходит чётной длины, здесь берётся верхний из двух центральных; другие варианты — дополнять края повтором крайнего значения. Скажи об этом вслух, не дожидаясь вопроса.</p>
+  </details>
+
+  <h2>Именно C++</h2>
+
+  <h3>15. Свой unique_ptr</h3>
+  <p>Написать упрощённый умный указатель с единоличным владением: конструктор от сырого указателя, деструктор, запрет копирования, перемещение, операторы <code>*</code> и <code>-&gt;</code>, метод <code>get()</code>.</p>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>template &lt;typename T&gt;
+class UniquePtr {
+public:
+  explicit UniquePtr(T* p = nullptr) : ptr_(p) {}
+  ~UniquePtr() { delete ptr_; }                      <span class="c">// delete nullptr безопасен</span>
+
+  UniquePtr(const UniquePtr&amp;) = delete;              <span class="c">// копировать нельзя</span>
+  UniquePtr&amp; operator=(const UniquePtr&amp;) = delete;
+
+  UniquePtr(UniquePtr&amp;&amp; other) noexcept : ptr_(other.ptr_) {
+    other.ptr_ = nullptr;                            <span class="c">// источник больше ничем не владеет</span>
+  }
+  UniquePtr&amp; operator=(UniquePtr&amp;&amp; other) noexcept {
+    if (this != &amp;other) {                            <span class="c">// защита от a = std::move(a)</span>
+      delete ptr_;                                   <span class="c">// освободить своё</span>
+      ptr_ = other.ptr_;
+      other.ptr_ = nullptr;
+    }
+    return *this;
+  }
+
+  T&amp; operator*() const { return *ptr_; }
+  T* operator-&gt;() const { return ptr_; }
+  T* get() const { return ptr_; }
+  explicit operator bool() const { return ptr_ != nullptr; }
+
+private:
+  T* ptr_;
+};</code></pre></div>
+    <p>Задача проверяет сразу правило пяти, RAII и семантику перемещения. Что называют в разборе: копирование удалено, потому что два владельца дали бы двойное освобождение; перемещение обнуляет источник; в перемещающем присваивании сначала освобождается старый ресурс и есть проверка на присваивание самому себе; <code>noexcept</code> нужен, чтобы контейнеры перемещали, а не копировали. Следующий вопрос обычно «а как устроен <code>shared_ptr</code>?»: рядом с объектом лежит блок управления со счётчиком владельцев, копирование увеличивает счётчик, деструктор уменьшает и удаляет объект при нуле.</p>
+  </details>
+
+  <h3>16. Найди ошибки</h3>
+  <p>В каждом из трёх фрагментов есть ошибка. Найди её и исправь.</p>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code><span class="c">// А</span>
+const std::string&amp; makeName(int id) {
+  std::string name = "channel-" + std::to_string(id);
+  return name;
+}
+
+<span class="c">// Б</span>
+for (auto it = v.begin(); it != v.end(); ++it) {
+  if (*it &lt; 0) v.erase(it);
+}
+
+<span class="c">// В</span>
+class Base { public: ~Base() {} };
+class Derived : public Base { std::vector&lt;int&gt; data_; };
+Base* p = new Derived();
+delete p;</code></pre></div>
+  <details class="qa"><summary>Решение и разбор</summary>
+    <p><b>А. Ссылка на локальную переменную.</b> <code>name</code> уничтожается при выходе из функции, и вызывающий получает висячую ссылку. Исправление: возвращать по значению, <code>std::string makeName(int id)</code>. Копии не будет, сработает перемещение или copy elision.</p>
+    <p><b>Б. Инвалидация итератора.</b> После <code>erase</code> итератор <code>it</code> недействителен, а <code>++it</code> на нём — неопределённое поведение. К тому же элемент сразу после удалённого был бы пропущен. Исправление:</p>
+    <div class="code"><div class="code-head"><span>cpp</span></div><pre><code>for (auto it = v.begin(); it != v.end(); ) {
+  if (*it &lt; 0) it = v.erase(it);     <span class="c">// erase возвращает итератор на следующий элемент</span>
+  else ++it;
+}
+
+<span class="c">// или идиома erase-remove, O(n) вместо O(n²):</span>
+v.erase(std::remove_if(v.begin(), v.end(), [](int x) { return x &lt; 0; }), v.end());</code></pre></div>
+    <p><b>В. Невиртуальный деструктор.</b> Удаление объекта наследника через указатель на базовый класс без виртуального деструктора — неопределённое поведение: на практике вызовется только <code>~Base</code>, и вектор <code>data_</code> утечёт. Исправление: <code>virtual ~Base() = default;</code>.</p>
+  </details>
+
+  <div class="box ai"><span class="lbl">Пять приёмов, которые решают большинство таких задач</span>
+    <ul>
+      <li><b>Два указателя</b> — с концов навстречу (задачи 1, 2) или чтение и запись в одну сторону (задача 8).</li>
+      <li><b>Хэш-таблица вместо вложенного цикла</b> — «видел ли я это раньше?» (задачи 4, 5, 6).</li>
+      <li><b>Бинарный поиск</b> — данные отсортированы и нужно O(log n) (задача 9).</li>
+      <li><b>Стек</b> — последним пришёл, первым закрылся (задача 11).</li>
+      <li><b>Скользящее окно</b> — обновлять результат, а не считать заново (задачи 13, 14).</li>
+    </ul></div>
+
+  <div class="box say"><span class="lbl">Как говорить, пока решаешь</span>
+    <p>«Сначала уточню условие: может ли вход быть пустым, какого размера данные, есть ли повторы. Самое простое решение — такое-то, за O(n²). Его можно улучшить, если использовать хэш-таблицу: будет O(n) времени и O(n) памяти. Пишу этот вариант. Проверяю на пустом входе, на одном элементе и на примере из условия.» Интервьюеру важен ход рассуждений: молча написанное верное решение оценивают ниже, чем проговорённое с одной исправленной ошибкой.</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Какие два вида приёма «два указателя» ты знаешь?</summary><p>С двух концов навстречу друг другу и два указателя в одну сторону с разной скоростью: один читает, другой пишет.</p></details>
+    <details class="qa"><summary>Как превратить поиск пары за O(n²) в O(n)?</summary><p>Запоминать просмотренные элементы в хэш-таблице и для каждого нового проверять за O(1), встречалась ли нужная ему пара.</p></details>
+    <details class="qa"><summary>Что делает идиома erase-remove?</summary><p><code>remove_if</code> сдвигает оставляемые элементы в начало и возвращает итератор на новый конец, <code>erase</code> отрезает хвост. Вместе удаляют элементы по условию за один проход.</p></details>
+    <details class="qa"><summary>Почему <code>v.size() - 1</code> опасно?</summary><p><code>size()</code> беззнаковый. На пустом контейнере результат — огромное положительное число, а не −1.</p></details>
+    <details class="qa"><summary>Что проверить в своём решении перед тем, как сказать «готово»?</summary><p>Пустой вход, один элемент, обычный пример, границы циклов и сложность по времени и памяти.</p></details>
+  </div>
+</section>
+
   </main>
 </div>
 <div class="scrim" id="scrim" hidden></div>
@@ -5362,7 +5941,7 @@ const TRACKS = [
   { id: 'js', title: 'Классический JavaScript', sheet: 'js', plan: ['Типы и приведение', 'Функции, область видимости, замыкания', 'this и контекст', 'Прототипы и классы', 'Асинхронность: колбэки, промисы, async/await', 'Event loop на задачах «что выведет»', 'Модули и сборка'] },
   { id: 'cs', title: 'Computer Science', sheet: 'livecoding', plan: ['Как компьютер хранит числа, текст и объекты', 'Память: стек, куча, ссылки', 'Процессы и потоки', 'Сложность алгоритмов: Big O', 'Структуры данных: массив, хэш-таблица, дерево, граф', 'Базовые алгоритмы: поиск, сортировка, обходы'] },
   { id: 'front', title: 'Фронтенд: освежить', sheet: 'react', plan: ['Как браузер рисует страницу', 'React: рендер, состояние, эффекты', 'TypeScript: система типов', 'CSS: каскад и раскладка', 'Производительность и доступность'] },
-  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt', 'Qt 5 и Qt 6, сборка и код под Windows и Linux', 'Boost и бэкенд на C++ рядом с Qt', 'Python для того, кто знает JavaScript'] },
+  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt', 'Qt 5 и Qt 6, сборка и код под Windows и Linux', 'Boost и бэкенд на C++ рядом с Qt', 'Python для того, кто знает JavaScript', 'Qt на практике: виджеты, компоновки, строки, события, модели', 'Тренажёр: 16 задач, которые пишут руками'] },
 ];
 
 const KEY = 'samouchitel:v1';
