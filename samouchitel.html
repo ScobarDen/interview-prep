@@ -4837,6 +4837,7 @@ connect(socket_, &amp;QTcpSocket::errorOccurred, this, &amp;Client::onError);
 
 socket_-&gt;connectToHost("192.168.1.10", 5000);     <span class="c">// возвращается сразу; итог придёт сигналом</span>
 socket_-&gt;write(packet);                           <span class="c">// кладёт в буфер отправки, тоже не ждёт</span></code></pre></div>
+  <p>Примеры написаны так, чтобы собираться и на Qt 5.15, и на Qt 6. В Qt 5 до версии 5.15 сигнала <code>errorOccurred</code> нет, вместо него перегруженный <code>error</code>; подробности в главе про Qt 5 и Qt 6.</p>
   <div class="code"><div class="code-head"><span>cpp — TCP-сервер</span></div><pre><code>server_ = new QTcpServer(this);
 connect(server_, &amp;QTcpServer::newConnection, this, [this]() {
   QTcpSocket* client = server_-&gt;nextPendingConnection();   <span class="c">// отдельный сокет на каждого клиента</span>
@@ -4883,6 +4884,247 @@ udp_-&gt;writeDatagram(payload, QHostAddress("192.168.1.10"), 6000);   <span cla
   <div class="more"><a href="https://doc.qt.io/qt-6/qtnetwork-programming.html" target="_blank" rel="noopener">Qt: Network Programming (англ.) ↗</a><a href="https://developer.mozilla.org/ru/docs/Glossary/TCP" target="_blank" rel="noopener">MDN: TCP ↗</a></div>
 </section>
 
+<section class="chapter" data-id="cpp-10" data-track="cpp" data-min="13" hidden>
+  <h1>Qt 5 и Qt 6, сборка и код под Windows и Linux</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Команда, которая пишет в основном на Qt 5 под Windows и Linux, спросит две вещи: знаешь ли ты, чем Qt 5 отличается от Qt 6, и понимаешь ли, на чём ломается код при переносе между системами. Кроме того, примеры в интернете и ответы агента сейчас чаще написаны под Qt 6, и надо уметь заметить, что код не соберётся на Qt 5.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Qt 5 и Qt 6 — как React 17 и React 18. Идеи и почти весь API те же, старый код переносится за разумное время, но часть устаревшего выброшена, а под капотом заменён движок.</p></div>
+
+  <h2>Qt 5 против Qt 6</h2>
+  <div class="tbl"><table>
+    <tr><th></th><th>Qt 5</th><th>Qt 6</th></tr>
+    <tr><td>Годы</td><td>2012–2020, последняя версия 5.15 (LTS)</td><td>С декабря 2020</td></tr>
+    <tr><td>Нужный стандарт C++</td><td>C++11</td><td>C++17</td></tr>
+    <tr><td>Основная система сборки</td><td>qmake (файлы <code>.pro</code>), CMake тоже работает</td><td>CMake, qmake оставлен для совместимости</td></tr>
+    <tr><td>Контейнеры</td><td><code>QList</code> и <code>QVector</code> — разные классы</td><td><code>QVector</code> стал псевдонимом <code>QList</code></td></tr>
+    <tr><td>Размеры и индексы</td><td><code>int</code></td><td><code>qsizetype</code> (64 бита на 64-битных системах)</td></tr>
+    <tr><td>Регулярные выражения</td><td><code>QRegExp</code> и <code>QRegularExpression</code></td><td>Только <code>QRegularExpression</code></td></tr>
+    <tr><td>Кодировки</td><td><code>QTextCodec</code></td><td><code>QStringConverter</code>, по умолчанию UTF-8</td></tr>
+    <tr><td>Графика</td><td>Напрямую OpenGL</td><td>Прослойка RHI: Direct3D, Vulkan, Metal или OpenGL</td></tr>
+    <tr><td>Экраны с высокой плотностью</td><td>Масштабирование включают вручную</td><td>Включено всегда</td></tr>
+    <tr><td>Перегруженные сигналы</td><td>Много, нужен <code>QOverload</code></td><td>Большинство перегрузок убрали</td></tr>
+  </table></div>
+  <p>Убранные из Qt 6 классы лежат в модуле <code>Core5Compat</code>: его подключают, чтобы перенести старый код и переписывать постепенно. Сигналы и слоты, дерево объектов, цикл событий, виджеты, Model/View — всё, что было в главе про Qt, одинаково в обеих версиях.</p>
+
+  <h2>Два синтаксиса connect</h2>
+  <div class="code"><div class="code-head"><span>cpp</span></div><pre><code><span class="c">// старый, на строках: встречается в коде времён Qt 4 и раннего Qt 5</span>
+connect(button, SIGNAL(clicked()), this, SLOT(onStart()));
+
+<span class="c">// новый, на указателях на методы: есть с Qt 5.0, основной сегодня</span>
+connect(button, &amp;QPushButton::clicked, this, &amp;MainWindow::onStart);</code></pre></div>
+  <p>Старый синтаксис сравнивает имена как строки во время работы программы. Опечатка в имени слота компилируется, а соединение просто не срабатывает, и в консоль падает предупреждение. Новый проверяется компилятором и позволяет подключать лямбды. В старом проекте ты увидишь оба.</p>
+  <div class="code"><div class="code-head"><span>cpp — перегруженный сигнал в Qt 5</span></div><pre><code><span class="c">// у QSpinBox два сигнала valueChanged: с int и с QString. Компилятор не знает, какой нужен</span>
+connect(spin, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, &amp;Panel::onValue);
+connect(spin, qOverload&lt;int&gt;(&amp;QSpinBox::valueChanged),     this, &amp;Panel::onValue);   <span class="c">// короче, нужен C++14</span></code></pre></div>
+  <div class="box myth"><span class="lbl">Что не соберётся на Qt 5</span>
+    <ul>
+      <li>Сигнал сокета <code>errorOccurred</code> появился только в 5.15. В более ранних версиях это перегруженный <code>error</code>: <code>QOverload&lt;QAbstractSocket::SocketError&gt;::of(&amp;QAbstractSocket::error)</code>.</li>
+      <li><code>qsizetype</code> есть с 5.10, но контейнеры Qt 5 всё равно возвращают <code>int</code>.</li>
+      <li><code>QStringConverter</code>, <code>QList</code> как единый контейнер, <code>qt_add_executable</code> в CMake — только Qt 6.</li>
+    </ul></div>
+
+  <h2>Виджеты и QML</h2>
+  <p>В Qt два способа делать интерфейс. <span class="term">Qt Widgets</span> — классические элементы на C++ (<code>QPushButton</code>, <code>QTableView</code>), стандарт для настольных инженерных программ. <span class="term">QML / Qt Quick</span> — декларативный язык описания интерфейса с логикой на JavaScript, отрисовка на видеокарте, плавные анимации. По устройству QML ближе к React: дерево компонентов, свойства и привязки, которые пересчитываются сами. Логика приложения в обоих случаях остаётся на C++. Что из двух использует команда, стоит спросить на собесе.</p>
+
+  <h2>Из чего состоит сборка Qt-проекта</h2>
+  <p>Кроме компилятора, работают три генератора кода: <span class="term">moc</span> (сигналы и слоты для классов с <code>Q_OBJECT</code>), <span class="term">uic</span> (превращает файлы <code>.ui</code> из Qt Designer в C++) и <span class="term">rcc</span> (встраивает ресурсы из <code>.qrc</code>, например иконки, в исполняемый файл). Система сборки запускает их сама.</p>
+  <div class="code"><div class="code-head"><span>qmake — app.pro</span></div><pre><code>QT += core gui widgets network
+CONFIG += c++17
+SOURCES += main.cpp mainwindow.cpp
+HEADERS += mainwindow.h
+FORMS   += mainwindow.ui
+win32: LIBS += -lws2_32          <span class="c"># строка только для Windows</span></code></pre></div>
+  <div class="code"><div class="code-head"><span>cmake — CMakeLists.txt для Qt 5</span></div><pre><code>cmake_minimum_required(VERSION 3.16)
+project(app LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)            <span class="c"># сам запускать moc</span>
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+
+find_package(Qt5 REQUIRED COMPONENTS Widgets Network)
+add_executable(app main.cpp mainwindow.cpp mainwindow.h mainwindow.ui)
+target_link_libraries(app PRIVATE Qt5::Widgets Qt5::Network)</code></pre></div>
+  <p>Оба файла не собирают проект сами. Они генерируют инструкции для настоящего сборщика: Makefile или Ninja на Linux, проект Visual Studio или тот же Ninja на Windows. Известная ошибка новичка — <code>undefined reference to vtable</code>: в класс добавили <code>Q_OBJECT</code>, а moc для него не отработал. Лечится перезапуском qmake или CMake.</p>
+
+  <h2>Что отличается между Windows и Linux</h2>
+  <div class="tbl"><table>
+    <tr><th>Что</th><th>Windows</th><th>Linux</th></tr>
+    <tr><td>Компилятор</td><td>MSVC или MinGW</td><td>GCC или Clang</td></tr>
+    <tr><td>Размер <code>long</code> на 64 битах</td><td>32 бита</td><td>64 бита</td></tr>
+    <tr><td>Размер <code>wchar_t</code></td><td>16 бит (UTF-16)</td><td>32 бита</td></tr>
+    <tr><td>Имена файлов</td><td>Регистр не различается</td><td>Регистр различается</td></tr>
+    <tr><td>Разделитель пути</td><td><code>\</code>, понимает и <code>/</code></td><td><code>/</code></td></tr>
+    <tr><td>Конец строки в тексте</td><td><code>\r\n</code></td><td><code>\n</code></td></tr>
+    <tr><td>Динамическая библиотека</td><td><code>.dll</code>, экспортируется только помеченное</td><td><code>.so</code>, по умолчанию экспортируется всё</td></tr>
+    <tr><td>Поставка программы</td><td><code>windeployqt</code> собирает нужные DLL рядом с exe</td><td>Пакет (deb, rpm) с зависимостями или AppImage</td></tr>
+  </table></div>
+  <p>Что из этого следует на практике:</p>
+  <ul>
+    <li><b>Типы фиксированного размера.</b> Для данных, которые пишутся в файл или уходят в сеть, бери <code>std::int32_t</code>, <code>std::uint64_t</code> или <code>qint32</code>, <code>quint64</code>. <code>long</code> на двух системах разного размера, и структура, записанная на Linux, прочитается на Windows неправильно.</li>
+    <li><b>Регистр в <code>#include</code>.</b> <code>#include "Signal.h"</code> при файле <code>signal.h</code> соберётся на Windows и упадёт на Linux. Самая частая поломка при переносе.</li>
+    <li><b>Пути.</b> Не склеивай строки с <code>\\</code>. Используй <code>QDir</code>, <code>QFileInfo</code> или <code>std::filesystem::path</code>, а системные папки бери из <code>QStandardPaths</code>: настройки на Windows лежат в <code>AppData</code>, на Linux в <code>~/.config</code>.</li>
+    <li><b>Экспорт из библиотеки.</b> Класс из своей DLL помечают макросом, который разворачивается в <code>Q_DECL_EXPORT</code> при сборке библиотеки и в <code>Q_DECL_IMPORT</code> при использовании. На Linux без этого работает, на Windows линковщик не найдёт символы.</li>
+    <li><b>Разные компиляторы — разные предупреждения.</b> Код, который молча принимает MSVC, может не собраться в GCC, и наоборот. Поэтому проект собирают на обеих системах в CI на каждое изменение.</li>
+    <li><b>Системный API.</b> Вызовы WinAPI или POSIX прячут за <code>#ifdef</code>, а лучше берут готовую обёртку из Qt, Boost или стандартной библиотеки.</li>
+  </ul>
+  <div class="code"><div class="code-head"><span>cpp — платформенный код</span></div><pre><code>#ifdef Q_OS_WIN
+  #include &lt;windows.h&gt;
+#elif defined(Q_OS_LINUX)
+  #include &lt;unistd.h&gt;
+#endif
+<span class="c">// без Qt то же самое: #ifdef _WIN32 и #ifdef __linux__</span></code></pre></div>
+  <div class="box ai"><span class="lbl">Твой опыт</span>
+    <p>В «Вымпеле» ты собирал и запускал Qt-приложение под Astra Linux. Это честный ответ на вопрос про Linux. Какая там была версия Qt и чем собирали, в твоих записях нет: вспомни до собеса, потому что «Qt 5 или 6, qmake или CMake» спросят первым делом.</p></div>
+
+  <h2>PyQt одним абзацем</h2>
+  <p>PyQt и PySide — привязки Qt к Python: те же классы, сигналы и слоты, только на Python. Их берут для быстрых инструментов и прототипов рядом с матмоделями. Сигнал объявляется как <code>pyqtSignal(int)</code>, подключается через <code>button.clicked.connect(handler)</code>. В PyQt6 перечисления пишутся полностью (<code>Qt.AlignmentFlag.AlignLeft</code> вместо <code>Qt.AlignLeft</code>), а запуск цикла событий называется <code>app.exec()</code> вместо <code>app.exec_()</code>.</p>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Qt 6 требует C++17, перешёл на CMake как основную систему сборки, объединил QList и QVector, убрал QRegExp и QTextCodec в модуль совместимости и рисует через прослойку RHI вместо прямого OpenGL. Базовые вещи — сигналы и слоты, дерево объектов, цикл событий — не изменились, поэтому с Qt 5 я работаю так же. В кроссплатформенном коде слежу за размерами типов, регистром имён файлов, путями и экспортом символов из библиотек, а платформенные вызовы прячу за обёртки Qt или за ifdef. Проект должен собираться на обеих системах в CI.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Назови три отличия Qt 6 от Qt 5.</summary><p>Требуется C++17; основная система сборки — CMake; <code>QVector</code> стал псевдонимом <code>QList</code>; убраны <code>QRegExp</code> и <code>QTextCodec</code>; графика через RHI.</p></details>
+    <details class="qa"><summary>Чем новый синтаксис <code>connect</code> лучше старого с <code>SIGNAL</code> и <code>SLOT</code>?</summary><p>Проверяется компилятором, а не сравнением строк во время работы, и позволяет подключать лямбды.</p></details>
+    <details class="qa"><summary>Зачем нужен <code>QOverload</code>?</summary><p>Чтобы выбрать нужный вариант перегруженного сигнала или слота, когда в <code>connect</code> передаётся указатель на метод.</p></details>
+    <details class="qa"><summary>Что делают moc, uic и rcc?</summary><p>moc генерирует код сигналов и метаинформации, uic превращает файлы форм <code>.ui</code> в C++, rcc встраивает ресурсы в исполняемый файл.</p></details>
+    <details class="qa"><summary>Откуда ошибка <code>undefined reference to vtable</code> у класса с <code>Q_OBJECT</code>?</summary><p>Для класса не отработал moc. Нужно перезапустить qmake или CMake, чтобы файл попал в обработку.</p></details>
+    <details class="qa"><summary>Почему <code>long</code> опасен в кроссплатформенном коде?</summary><p>На 64-битной Windows он 32 бита, на 64-битном Linux — 64. Для данных с фиксированным форматом берут <code>int32_t</code>, <code>int64_t</code>.</p></details>
+    <details class="qa"><summary>Код собирается на Windows, а на Linux не находит заголовочный файл. Первая гипотеза?</summary><p>Регистр букв в имени файла в <code>#include</code> не совпадает с настоящим. Windows это прощает, Linux нет.</p></details>
+    <details class="qa"><summary>Чем Qt Widgets отличается от QML?</summary><p>Widgets — классические элементы на C++. QML — декларативное описание интерфейса с привязками свойств и отрисовкой на видеокарте. Логика в обоих случаях на C++.</p></details>
+  </div>
+  <div class="more"><a href="https://doc.qt.io/qt-6/portingguide.html" target="_blank" rel="noopener">Qt: Porting to Qt 6 (англ.) ↗</a><a href="https://doc.qt.io/qt-5/signalsandslots.html" target="_blank" rel="noopener">Qt 5: Signals &amp; Slots (англ.) ↗</a></div>
+</section>
+
+<section class="chapter" data-id="cpp-11" data-track="cpp" data-min="12" hidden>
+  <h1>Boost и бэкенд на C++ рядом с Qt</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>Связка «логика на C++ со стандартной библиотекой и Boost, интерфейс на Qt» типична для настольных инженерных программ. От тебя не ждут знания Boost наизусть: в нём больше 150 библиотек. Нужно понимать, что это такое, как он связан со стандартом, назвать пять-шесть библиотек и объяснить, как логика без Qt общается с интерфейсом на Qt.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Boost — прихожая стандарта. Библиотеку сначала годами обкатывают в Boost, потом лучшее переезжает в <code>std</code>. Похоже на то, как в JavaScript возможности сначала живут в lodash или в Babel-плагине, а потом попадают в язык.</p></div>
+
+  <h2>Что такое Boost</h2>
+  <p>Набор открытых библиотек для C++, каждая проходит рецензию сообщества. Большинство состоит только из заголовочных файлов: подключил и пользуешься. Часть нужно собирать и линковать, среди них <code>filesystem</code>, <code>thread</code>, <code>program_options</code>, <code>regex</code>, <code>log</code>, <code>test</code>.</p>
+
+  <h2>Boost и стандарт: что куда переехало</h2>
+  <div class="tbl"><table>
+    <tr><th>В Boost</th><th>В стандарте</th><th>С какого</th></tr>
+    <tr><td><code>boost::shared_ptr</code>, <code>scoped_ptr</code></td><td><code>std::shared_ptr</code>, <code>std::unique_ptr</code></td><td>C++11</td></tr>
+    <tr><td><code>boost::thread</code>, <code>boost::mutex</code></td><td><code>std::thread</code>, <code>std::mutex</code></td><td>C++11</td></tr>
+    <tr><td><code>boost::function</code>, <code>boost::bind</code></td><td><code>std::function</code>, <code>std::bind</code>, лямбды</td><td>C++11</td></tr>
+    <tr><td><code>boost::regex</code>, <code>boost::chrono</code>, <code>boost::array</code></td><td><code>std::regex</code>, <code>std::chrono</code>, <code>std::array</code></td><td>C++11</td></tr>
+    <tr><td><code>boost::optional</code>, <code>boost::variant</code>, <code>boost::any</code></td><td><code>std::optional</code>, <code>std::variant</code>, <code>std::any</code></td><td>C++17</td></tr>
+    <tr><td><code>boost::filesystem</code></td><td><code>std::filesystem</code></td><td>C++17</td></tr>
+    <tr><td><code>boost::string_view</code></td><td><code>std::string_view</code></td><td>C++17</td></tr>
+    <tr><td><code>boost::span</code></td><td><code>std::span</code></td><td>C++20</td></tr>
+  </table></div>
+  <p>Отсюда практический вывод для проекта, где часть кода собирается на C++14: <code>std::optional</code>, <code>std::variant</code>, <code>std::any</code> и <code>std::filesystem</code> там недоступны, и вместо них стоят одноимённые классы из Boost. Смысл тот же, отличаются детали: например, пустой <code>boost::optional</code> — это <code>boost::none</code>, а не <code>std::nullopt</code>. Правило для нового кода: если нужное есть в <code>std</code> для стандарта проекта, берут <code>std</code>, Boost — для того, чего в стандарте нет.</p>
+
+  <h2>Чего в стандарте нет и берут из Boost</h2>
+  <div class="tbl"><table>
+    <tr><th>Библиотека</th><th>Для чего</th></tr>
+    <tr><td><b>Asio</b></td><td>Сеть и асинхронный ввод-вывод: TCP, UDP, таймеры, последовательные порты. В стандарте сети нет до сих пор</td></tr>
+    <tr><td><b>Beast</b></td><td>HTTP и WebSocket поверх Asio</td></tr>
+    <tr><td><b>program_options</b></td><td>Разбор аргументов командной строки и файлов настроек</td></tr>
+    <tr><td><b>Test</b></td><td>Модульные тесты</td></tr>
+    <tr><td><b>Log</b></td><td>Журналирование</td></tr>
+    <tr><td><b>Algorithm/string</b></td><td><code>split</code>, <code>trim</code>, <code>join</code>, <code>to_lower</code> — то, чего не хватает <code>std::string</code></td></tr>
+    <tr><td><b>lexical_cast</b></td><td>Преобразование между строкой и числом одной функцией</td></tr>
+    <tr><td><b>Signals2</b></td><td>Сигналы и слоты без Qt</td></tr>
+    <tr><td><b>circular_buffer</b></td><td>Кольцевой буфер фиксированного размера: последние N отсчётов</td></tr>
+    <tr><td><b>Serialization, PropertyTree, JSON</b></td><td>Сохранение объектов, чтение настроек, JSON</td></tr>
+    <tr><td><b>uBLAS, Math, Multiprecision</b></td><td>Матрицы, специальные функции, длинная арифметика</td></tr>
+  </table></div>
+  <div class="code"><div class="code-head"><span>cpp — как это выглядит в коде</span></div><pre><code>#include &lt;boost/algorithm/string.hpp&gt;
+#include &lt;boost/lexical_cast.hpp&gt;
+#include &lt;boost/optional.hpp&gt;
+
+std::vector&lt;std::string&gt; parts;
+boost::split(parts, line, boost::is_any_of(";"));        <span class="c">// "433.9;-71.5" → {"433.9", "-71.5"}</span>
+boost::trim(parts[0]);
+
+boost::optional&lt;double&gt; parseFreq(const std::string&amp; text) {
+  try {
+    return boost::lexical_cast&lt;double&gt;(text);
+  } catch (const boost::bad_lexical_cast&amp;) {
+    return boost::none;                                  <span class="c">// не число</span>
+  }
+}</code></pre></div>
+
+  <h2>Boost.Asio: главное, что стоит понимать</h2>
+  <p>Asio устроен так же, как цикл событий в Node.js и в Qt. Есть объект <code>io_context</code> — очередь готовых операций. Ты запускаешь асинхронную операцию и передаёшь обработчик, а вызов <code>io.run()</code> крутит цикл и вызывает обработчики по мере готовности.</p>
+  <div class="code"><div class="code-head"><span>cpp — асинхронное чтение из TCP-сокета</span></div><pre><code>using boost::asio::ip::tcp;
+
+class Session : public std::enable_shared_from_this&lt;Session&gt; {
+public:
+  explicit Session(tcp::socket socket) : socket_(std::move(socket)) {}
+  void start() { read(); }
+
+private:
+  void read() {
+    auto self = shared_from_this();            <span class="c">// держим объект живым, пока операция в полёте</span>
+    socket_.async_read_some(boost::asio::buffer(data_),
+      [this, self](boost::system::error_code ec, std::size_t n) {
+        if (ec) return;                        <span class="c">// соединение закрыто или ошибка: сессия удалится сама</span>
+        handle(data_.data(), n);
+        read();                                <span class="c">// ждём следующую порцию</span>
+      });
+  }
+
+  tcp::socket socket_;
+  std::array&lt;char, 1024&gt; data_;
+};
+
+boost::asio::io_context io;
+<span class="c">// ... приняли соединение, создали std::make_shared&lt;Session&gt;(std::move(socket))-&gt;start();</span>
+io.run();                                      <span class="c">// цикл событий: блокирует поток, пока есть работа</span></code></pre></div>
+  <ul>
+    <li><b><code>io_context</code></b> — цикл событий. <code>run()</code> можно вызвать в нескольких потоках, тогда обработчики выполняются параллельно.</li>
+    <li><b>Обработчик</b> получает код ошибки первым аргументом. Исключений нет, ошибку проверяют вручную, как в колбэках Node.js.</li>
+    <li><b><code>shared_from_this</code></b> — стандартный приём. Операция завершится позже, и к этому моменту объект сессии должен существовать. Лямбда захватывает <code>shared_ptr</code> на него и этим продлевает ему жизнь. Это прямой ответ на ловушку «лямбда пережила объект» из главы про современный C++.</li>
+    <li><b><code>strand</code></b> — гарантия, что обработчики одной сессии не выполняются одновременно, даже если <code>run()</code> крутят несколько потоков. Заменяет мьютекс.</li>
+    <li>Правило про поток байтов и фрейминг из главы про TCP здесь действует полностью: <code>async_read_some</code> возвращает сколько пришло, а не одно сообщение.</li>
+  </ul>
+
+  <h2>Как бэкенд без Qt живёт рядом с интерфейсом на Qt</h2>
+  <p>Обычное разделение: ядро (расчёты, протоколы, работа с устройствами) написано на чистом C++ с <code>std</code> и Boost и ничего не знает про Qt. Интерфейс на Qt — тонкий слой над ним. Плюсы: ядро тестируется без окон, собирается как библиотека, его можно запустить из консоли или вызвать из Python.</p>
+  <p>Главная сложность — потоки. Ядро считает и слушает сеть в своих потоках, а виджеты разрешено трогать только из главного. Результат надо перебросить в главный поток:</p>
+  <div class="code"><div class="code-head"><span>cpp — из потока ядра в поток интерфейса</span></div><pre><code><span class="c">// ядро не знает про Qt и просто вызывает колбэк в своём потоке</span>
+core.onMeasurement([this](const Measurement&amp; m) {
+  QMetaObject::invokeMethod(this, [this, m]() {    <span class="c">// m захвачен по значению: копия уедет в другой поток</span>
+    plot_-&gt;append(m);                              <span class="c">// выполнится в потоке объекта this, то есть в главном</span>
+  }, Qt::QueuedConnection);
+});</code></pre></div>
+  <p>Второй вариант — прослойка-адаптер: класс-наследник <code>QObject</code>, который получает колбэк от ядра и испускает сигнал. Соединение сигнала с виджетом между потоками становится Queued автоматически. Данные при этом копируются, а свои типы для передачи через очередь регистрируют: <code>qRegisterMetaType&lt;Measurement&gt;()</code>.</p>
+  <div class="box myth"><span class="lbl">Конфликт Qt и Boost, о котором знают те, кто их совмещал</span>
+    <p>Qt объявляет макросы <code>signals</code>, <code>slots</code> и <code>emit</code>. В Boost.Signals2 есть пространство имён <code>boost::signals2</code> и поля с такими же именами, и макросы Qt ломают его заголовки. Решение: собрать проект с <code>CONFIG += no_keywords</code> (в CMake — определение <code>QT_NO_KEYWORDS</code>) и писать <code>Q_SIGNALS</code>, <code>Q_SLOTS</code>, <code>Q_EMIT</code>. Вторая типичная проблема на Windows — порядок подключения: заголовки Asio должны идти раньше <code>windows.h</code>.</p></div>
+
+  <h2>Где здесь Python</h2>
+  <p>Когда матмодели, симуляторы и тесты пишут на Python, а рабочий код на C++, между ними обычно один из трёх мостов: общий формат файлов или сетевой протокол (симулятор на Python шлёт данные приложению по TCP или UDP), привязки C++ к Python через pybind11 или Boost.Python (ядро вызывается из Python как модуль), либо сравнение результатов: модель на Python даёт эталон, с которым сверяют реализацию на C++. Какой из них у команды, хороший вопрос интервьюеру.</p>
+
+  <div class="box ai"><span class="lbl">Честная позиция на собесе</span>
+    <p>В твоих записях Boost не упоминается. Если не работал с ним, так и скажи, и сразу покажи, что понимаешь устройство: «в проде Boost не использовал, но знаю, что optional, variant, filesystem и умные указатели пришли в стандарт из него, а Asio — это цикл событий с асинхронными операциями, та же модель, что в Node.js и в Qt». Это сильнее, чем выдуманный опыт, который развалится на втором вопросе.</p></div>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Boost — набор рецензируемых библиотек, из которого многое перешло в стандарт: умные указатели, thread, function и regex в C++11, optional, variant, any и filesystem в C++17. В проекте на C++14 вместо std::optional стоит boost::optional. Из того, чего в стандарте нет, главное — Asio: сеть и асинхронный ввод-вывод вокруг io_context, по сути цикл событий. Ядро на std и Boost я держу независимым от Qt, а результаты из его потоков передаю в интерфейс через очередь событий: сигналом с Queued-соединением или QMetaObject::invokeMethod.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Что такое Boost и как он связан со стандартом C++?</summary><p>Набор открытых рецензируемых библиотек. Многие возможности стандарта сначала появились и обкатались в Boost.</p></details>
+    <details class="qa"><summary>Назови три вещи, которые пришли из Boost в C++11, и три — в C++17.</summary><p>C++11: <code>shared_ptr</code>, <code>thread</code>, <code>function</code>, <code>regex</code>, <code>chrono</code>. C++17: <code>optional</code>, <code>variant</code>, <code>any</code>, <code>filesystem</code>, <code>string_view</code>.</p></details>
+    <details class="qa"><summary>Проект собирается на C++14. Чем заменить <code>std::optional</code>?</summary><p><code>boost::optional</code>. Пустое значение — <code>boost::none</code>.</p></details>
+    <details class="qa"><summary>Для чего нужен Boost.Asio и что такое <code>io_context</code>?</summary><p>Для сети и асинхронного ввода-вывода. <code>io_context</code> — цикл событий: <code>run()</code> вызывает обработчики завершённых операций.</p></details>
+    <details class="qa"><summary>Зачем в обработчике Asio захватывают <code>shared_from_this()</code>?</summary><p>Чтобы объект сессии гарантированно жил до завершения асинхронной операции. Иначе обработчик обратится к удалённому объекту.</p></details>
+    <details class="qa"><summary>Что такое <code>strand</code>?</summary><p>Механизм Asio, который выполняет обработчики строго по очереди, даже когда цикл событий крутят несколько потоков.</p></details>
+    <details class="qa"><summary>Ядро в своём потоке получило результат. Как показать его в окне Qt?</summary><p>Передать в главный поток через очередь событий: сигнал с Queued-соединением или <code>QMetaObject::invokeMethod</code> с <code>Qt::QueuedConnection</code>. Напрямую трогать виджеты из чужого потока нельзя.</p></details>
+    <details class="qa"><summary>Почему Qt и Boost.Signals2 конфликтуют и как это решают?</summary><p>Макросы Qt <code>signals</code>, <code>slots</code>, <code>emit</code> ломают заголовки Boost. Проект собирают с <code>no_keywords</code> и пишут <code>Q_SIGNALS</code>, <code>Q_SLOTS</code>, <code>Q_EMIT</code>.</p></details>
+  </div>
+  <div class="more"><a href="https://www.boost.org/doc/libs/release/doc/html/boost_asio/overview.html" target="_blank" rel="noopener">Boost.Asio: Overview (англ.) ↗</a><a href="https://www.boost.org/doc/libs/release/" target="_blank" rel="noopener">Список библиотек Boost (англ.) ↗</a></div>
+</section>
+
   </main>
 </div>
 <div class="scrim" id="scrim" hidden></div>
@@ -4895,7 +5137,7 @@ const TRACKS = [
   { id: 'js', title: 'Классический JavaScript', sheet: 'js', plan: ['Типы и приведение', 'Функции, область видимости, замыкания', 'this и контекст', 'Прототипы и классы', 'Асинхронность: колбэки, промисы, async/await', 'Event loop на задачах «что выведет»', 'Модули и сборка'] },
   { id: 'cs', title: 'Computer Science', sheet: 'livecoding', plan: ['Как компьютер хранит числа, текст и объекты', 'Память: стек, куча, ссылки', 'Процессы и потоки', 'Сложность алгоритмов: Big O', 'Структуры данных: массив, хэш-таблица, дерево, граф', 'Базовые алгоритмы: поиск, сортировка, обходы'] },
   { id: 'front', title: 'Фронтенд: освежить', sheet: 'react', plan: ['Как браузер рисует страницу', 'React: рендер, состояние, эффекты', 'TypeScript: система типов', 'CSS: каскад и раскладка', 'Производительность и доступность'] },
-  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt'] },
+  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt', 'Qt 5 и Qt 6, сборка и код под Windows и Linux', 'Boost и бэкенд на C++ рядом с Qt'] },
 ];
 
 const KEY = 'samouchitel:v1';
