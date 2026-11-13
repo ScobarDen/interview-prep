@@ -5125,6 +5125,231 @@ core.onMeasurement([this](const Measurement&amp; m) {
   <div class="more"><a href="https://www.boost.org/doc/libs/release/doc/html/boost_asio/overview.html" target="_blank" rel="noopener">Boost.Asio: Overview (англ.) ↗</a><a href="https://www.boost.org/doc/libs/release/" target="_blank" rel="noopener">Список библиотек Boost (англ.) ↗</a></div>
 </section>
 
+<section class="chapter" data-id="cpp-12" data-track="cpp" data-min="15" hidden>
+  <h1>Python для того, кто знает JavaScript</h1>
+  <div class="box why"><span class="lbl">Зачем это</span>
+    <p>В команде, где матмодели, симуляторы и тесты пишут на Python, тебе придётся читать этот код: запускать симулятор, понимать тест, сверять свою реализацию на C++ с эталоном. Писать на Python с первого дня не потребуют. Цель главы — чтобы ты свободно читал типичный скрипт и знал, где Python ведёт себя не так, как JavaScript.</p></div>
+
+  <div class="box model"><span class="lbl">Картинка в голове</span>
+    <p>Python — это JavaScript, в котором фигурные скобки заменили отступами, а <code>undefined</code> отменили. Те же динамические типы, сборщик мусора, списки и словари вместо массивов и объектов. Девяносто процентов твоей интуиции из JS работает.</p></div>
+
+  <h2>Синтаксис за две минуты</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>threshold = -70.0                  <span class="c"># переменная: без let и const, без точки с запятой</span>
+name = "канал 1"
+
+def is_loud(level, limit=threshold):   <span class="c"># функция; у limit значение по умолчанию</span>
+    if level &gt; limit:                  <span class="c"># блок задаётся отступом в 4 пробела, скобок нет</span>
+        return True
+    elif level == limit:
+        return None                    <span class="c"># None — единственное «ничего», аналог null</span>
+    else:
+        return False
+
+for i in range(3):                     <span class="c"># 0, 1, 2</span>
+    print(f"{name}: шаг {i}")          <span class="c"># f-строка — как шаблонная строка с ${}</span></code></pre></div>
+  <p>Отступ — часть синтаксиса: строка с неправильным отступом либо не запустится, либо окажется в другом блоке. Имена пишут в <code>snake_case</code>, классы — в <code>PascalCase</code>.</p>
+
+  <h2>Словарь перевода с JavaScript</h2>
+  <div class="tbl"><table>
+    <tr><th>JavaScript</th><th>Python</th></tr>
+    <tr><td><code>null</code>, <code>undefined</code></td><td><code>None</code></td></tr>
+    <tr><td><code>true</code>, <code>false</code></td><td><code>True</code>, <code>False</code></td></tr>
+    <tr><td><code>&amp;&amp;</code>, <code>||</code>, <code>!</code></td><td><code>and</code>, <code>or</code>, <code>not</code></td></tr>
+    <tr><td><code>===</code></td><td><code>==</code> (сравнивает значения и не приводит типы)</td></tr>
+    <tr><td>Сравнение ссылок на объект</td><td><code>is</code>; для <code>None</code> пишут <code>x is None</code></td></tr>
+    <tr><td>Массив <code>[1, 2]</code></td><td>Список <code>[1, 2]</code> (<code>list</code>)</td></tr>
+    <tr><td>Объект <code>{a: 1}</code>, <code>Map</code></td><td>Словарь <code>{"a": 1}</code> (<code>dict</code>), ключи в кавычках</td></tr>
+    <tr><td><code>Set</code></td><td><code>{1, 2}</code> (<code>set</code>)</td></tr>
+    <tr><td>—</td><td>Кортеж <code>(1, 2)</code> (<code>tuple</code>): неизменяемый список</td></tr>
+    <tr><td><code>arr.length</code></td><td><code>len(arr)</code></td></tr>
+    <tr><td><code>arr.push(x)</code></td><td><code>arr.append(x)</code></td></tr>
+    <tr><td><code>arr.includes(x)</code>, <code>key in obj</code></td><td><code>x in arr</code>, <code>key in d</code></td></tr>
+    <tr><td><code>for (const x of arr)</code></td><td><code>for x in arr:</code></td></tr>
+    <tr><td><code>arr.map(f)</code>, <code>arr.filter(f)</code></td><td>Генератор списка: <code>[f(x) for x in arr if cond(x)]</code></td></tr>
+    <tr><td><code>(x) =&gt; x * 2</code></td><td><code>lambda x: x * 2</code> (только одно выражение)</td></tr>
+    <tr><td><code>try / catch / finally</code>, <code>throw</code></td><td><code>try / except / finally</code>, <code>raise</code></td></tr>
+    <tr><td><code>this</code></td><td><code>self</code>, пишется явно первым параметром метода</td></tr>
+    <tr><td><code>import { f } from './m.js'</code></td><td><code>from m import f</code></td></tr>
+    <tr><td><code>console.log</code></td><td><code>print</code></td></tr>
+  </table></div>
+
+  <h2>Где Python ведёт себя иначе</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>7 / 2        <span class="c"># 3.5  — обычное деление всегда даёт дробное</span>
+7 // 2       <span class="c"># 3    — целочисленное деление</span>
+2 ** 10      <span class="c"># 1024 — степень</span>
+2 ** 100     <span class="c"># целые числа не переполняются, длина не ограничена</span>
+
+"5" + 5      <span class="c"># TypeError: строку с числом не сложить, неявных приведений нет</span>
+int("5") + 5 <span class="c"># 10</span>
+
+if []:       <span class="c"># пустой список, словарь, строка, 0 и None считаются ложью</span>
+    ...      <span class="c"># в JS пустой массив — истина, здесь наоборот</span></code></pre></div>
+  <ul>
+    <li><b>Нет <code>undefined</code>.</b> Обращение к несуществующей переменной, ключу словаря или индексу списка бросает исключение (<code>NameError</code>, <code>KeyError</code>, <code>IndexError</code>). Безопасное чтение из словаря: <code>d.get("key", default)</code>.</li>
+    <li><b>Строгая типизация.</b> Типы динамические, но не смешиваются молча. Никаких <code>"5" * "2" == 10</code>.</li>
+    <li><b>Целое и дробное — разные типы:</b> <code>int</code> и <code>float</code>. <code>float</code> — тот же 64-битный double, что <code>number</code> в JS, и <code>0.1 + 0.2 != 0.3</code> здесь тоже.</li>
+  </ul>
+
+  <h2>Списки, срезы, словари</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>levels = [-71.5, -64.0, -80.2, -59.9]
+
+levels[0]          <span class="c"># -71.5</span>
+levels[-1]         <span class="c"># -59.9: отрицательный индекс считает с конца</span>
+levels[1:3]        <span class="c"># [-64.0, -80.2]: срез от 1 до 3, конец не включён</span>
+levels[:2]         <span class="c"># первые два</span>
+levels[::-1]       <span class="c"># копия в обратном порядке</span>
+
+loud = [x for x in levels if x &gt; -70]        <span class="c"># [-64.0, -59.9]  — filter</span>
+shifted = [x + 10 for x in levels]           <span class="c"># map</span>
+
+for i, x in enumerate(levels):               <span class="c"># индекс и значение сразу</span>
+    print(i, x)
+
+channel = {"id": 3, "freq": 433.9}
+channel["freq"]                              <span class="c"># 433.9; channel.freq не сработает</span>
+for key, value in channel.items():           <span class="c"># перебор пар</span>
+    print(key, value)
+
+freq, level = 433.9, -71.5                   <span class="c"># распаковка кортежа, как деструктуризация</span>
+sorted(levels, reverse=True)                 <span class="c"># новый отсортированный список; levels.sort() меняет на месте</span></code></pre></div>
+
+  <h2>Функции</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>def smooth(samples, window=5, mode="median"):
+    ...
+
+smooth(data)                          <span class="c"># window=5, mode="median"</span>
+smooth(data, mode="mean")             <span class="c"># именованный аргумент: порядок не важен</span>
+
+def log(*args, **kwargs):             <span class="c"># *args — кортеж лишних аргументов, **kwargs — словарь именованных</span>
+    print(args, kwargs)</code></pre></div>
+  <div class="box myth"><span class="lbl">Ловушка, которую спрашивают на любом собесе по Python</span>
+    <p>Значение по умолчанию создаётся один раз, при определении функции. <code>def add(x, items=[]): items.append(x); return items</code> копит элементы между вызовами: второй вызов вернёт список из двух элементов. Правильно: <code>items=None</code> и внутри <code>if items is None: items = []</code>.</p></div>
+
+  <h2>Ссылки и изменяемость</h2>
+  <p>Как в JS: переменная хранит ссылку на объект. <code>b = a</code> для списка не создаёт копию, обе переменные смотрят на один список. Копия — <code>a.copy()</code> или <code>a[:]</code>, глубокая — <code>copy.deepcopy(a)</code>. Числа, строки и кортежи неизменяемы, списки, словари и множества изменяемы. Ключом словаря может быть только неизменяемое: строка, число, кортеж.</p>
+
+  <h2>Классы</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>class Signal:
+    def __init__(self, freq, level):      <span class="c"># конструктор</span>
+        self.freq = freq                  <span class="c"># поля создаются присваиванием в self</span>
+        self.level = level
+
+    def is_loud(self, limit=-70):         <span class="c"># self обязателен в каждом методе</span>
+        return self.level &gt; limit
+
+    def __repr__(self):                   <span class="c"># как объект печатается; аналог toString</span>
+        return f"Signal({self.freq}, {self.level})"
+
+s = Signal(433.9, -64.0)                  <span class="c"># без new</span>
+
+from dataclasses import dataclass
+
+@dataclass                                <span class="c"># декоратор сам напишет __init__, __repr__ и сравнение</span>
+class Measurement:
+    time: float
+    value: float = 0.0</code></pre></div>
+  <p>Методы с двумя подчёркиваниями (<code>__init__</code>, <code>__repr__</code>, <code>__len__</code>, <code>__eq__</code>, <code>__add__</code>) Python вызывает сам: при создании, печати, <code>len(x)</code>, <code>==</code>, <code>+</code>. Это аналог перегрузки операторов в C++. Приватных полей нет: имя с подчёркиванием (<code>_buffer</code>) — договорённость «не трогать снаружи». Строка с <code>@</code> перед функцией или классом — <span class="term">декоратор</span>: функция, которая оборачивает то, что под ней.</p>
+
+  <h2>Подсказки типов</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>def mean(values: list[float]) -&gt; float:
+    return sum(values) / len(values)</code></pre></div>
+  <p>Выглядит как TypeScript, но интерпретатор эти аннотации не проверяет: <code>mean("abc")</code> запустится и упадёт уже внутри. Проверяет их отдельный инструмент (mypy, pyright) и редактор.</p>
+
+  <h2>with: аналог RAII</h2>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>with open("data.csv") as f:      <span class="c"># файл закроется при выходе из блока, даже при исключении</span>
+    for line in f:
+        parts = line.strip().split(";")
+
+try:
+    value = float(parts[1])
+except (ValueError, IndexError) as e:
+    print(f"плохая строка: {e}")</code></pre></div>
+
+  <h2>Модули, пакеты, окружения</h2>
+  <ul>
+    <li>Каждый файл <code>.py</code> — модуль. Папка с модулями — пакет.</li>
+    <li><code>pip install numpy</code> ставит пакет, аналог <code>npm install</code>. Список зависимостей лежит в <code>requirements.txt</code> или <code>pyproject.toml</code>.</li>
+    <li><span class="term">Виртуальное окружение</span> (<code>python -m venv .venv</code>) — отдельная папка с пакетами проекта, аналог локального <code>node_modules</code>. Без него пакеты ставятся на всю систему и конфликтуют версиями.</li>
+    <li>Строка <code>if __name__ == "__main__":</code> внизу файла означает «выполнить этот блок, только если файл запущен напрямую, а не импортирован». Так модуль одновременно и библиотека, и скрипт.</li>
+  </ul>
+
+  <h2>numpy на пальцах</h2>
+  <p>Чистый Python медленный: цикл по миллиону чисел идёт в десятки раз дольше, чем на C++. Для расчётов берут <span class="term">numpy</span>: массив чисел одного типа, который лежит в памяти сплошным блоком, как <code>std::vector&lt;double&gt;</code>, а операции над ним выполняет скомпилированный код на C.</p>
+  <div class="code"><div class="code-head"><span>python</span></div><pre><code>import numpy as np
+
+t = np.linspace(0, 1, 1000)                <span class="c"># 1000 точек от 0 до 1</span>
+signal = np.sin(2 * np.pi * 50 * t)        <span class="c"># синус 50 Гц сразу для всех точек, без цикла</span>
+noisy = signal + 0.1 * np.random.randn(1000)
+
+noisy.shape                                <span class="c"># (1000,) — размеры массива</span>
+noisy.mean(), np.median(noisy), noisy.std()   <span class="c"># среднее, медиана, стандартное отклонение</span>
+loud = noisy[noisy &gt; 0.5]                  <span class="c"># отбор по условию: маска из True и False</span>
+
+m = np.zeros((3, 4))                       <span class="c"># матрица 3 на 4</span>
+m[0, :]                                    <span class="c"># первая строка</span>
+m.T @ m                                    <span class="c"># транспонирование и матричное умножение</span></code></pre></div>
+  <ul>
+    <li><b>Векторизация</b> — операция записана для массива целиком, а цикл выполняется внутри numpy на C. Если видишь в расчётном коде <code>for</code> по элементам массива, это обычно медленное место.</li>
+    <li><b>Срез массива numpy — это вид, а не копия.</b> <code>part = a[10:20]; part[0] = 0</code> изменит и <code>a</code>. У обычного списка срез — копия.</li>
+    <li><b>Broadcasting</b> — массив и число или массивы разной формы складываются по понятным правилам: <code>signal + 0.1</code> прибавит число к каждому элементу.</li>
+    <li>Рядом обычно стоят <b>scipy</b> (фильтры, оптимизация, интегрирование), <b>matplotlib</b> (графики) и <b>pandas</b> (таблицы).</li>
+  </ul>
+  <p>Среднее, медиана и мода без numpy есть в стандартном модуле: <code>statistics.mean(v)</code>, <code>statistics.median(v)</code>, <code>statistics.mode(v)</code>.</p>
+
+  <h2>Тесты на pytest</h2>
+  <div class="code"><div class="code-head"><span>python — test_filter.py</span></div><pre><code>import pytest
+from filters import median_filter
+
+def test_removes_single_spike():                 <span class="c"># тест — функция с именем на test_</span>
+    data = [1, 1, 100, 1, 1]
+    assert median_filter(data, window=3) == [1, 1, 1, 1, 1]   <span class="c"># обычный assert</span>
+
+@pytest.mark.parametrize("window", [3, 5, 7])    <span class="c"># один тест на несколько наборов данных</span>
+def test_keeps_length(window):
+    data = list(range(20))
+    assert len(median_filter(data, window)) == len(data)
+
+def test_rejects_even_window():
+    with pytest.raises(ValueError):              <span class="c"># ожидаем исключение</span>
+        median_filter([1, 2, 3], window=4)
+
+def test_float_result():
+    assert 0.1 + 0.2 == pytest.approx(0.3)       <span class="c"># сравнение дробных с допуском</span></code></pre></div>
+  <p>Запуск — команда <code>pytest</code> в папке проекта: она сама находит файлы <code>test_*.py</code>. <span class="term">Фикстура</span> (функция с декоратором <code>@pytest.fixture</code>) готовит данные или окружение для теста и передаётся в него как параметр по имени. По смыслу это <code>beforeEach</code> из Jest.</p>
+
+  <h2>Python рядом с C++</h2>
+  <div class="tbl"><table>
+    <tr><th></th><th>Python</th><th>C++</th></tr>
+    <tr><td>Запуск</td><td>Интерпретатор выполняет байт-код</td><td>Компилируется в машинный код</td></tr>
+    <tr><td>Типы</td><td>Динамические, проверяются при выполнении</td><td>Статические, проверяются компилятором</td></tr>
+    <tr><td>Память</td><td>Подсчёт ссылок плюс сборщик циклов</td><td>Вручную: RAII и умные указатели</td></tr>
+    <tr><td>Скорость</td><td>Медленный сам, быстрый через numpy</td><td>Быстрый</td></tr>
+    <tr><td>Для чего берут</td><td>Модели, прототипы, тесты, скрипты</td><td>Рабочий код с требованиями к скорости и памяти</td></tr>
+  </table></div>
+  <p><span class="term">GIL</span> — глобальная блокировка интерпретатора: в один момент байт-код Python выполняет только один поток. Потоки помогают при ожидании сети и файлов, но не ускоряют вычисления. Для вычислений берут numpy (он на время расчёта блокировку отпускает), несколько процессов (<code>multiprocessing</code>) или выносят тяжёлое в C++.</p>
+
+  <div class="box ai"><span class="lbl">Честная позиция на собесе</span>
+    <p>В твоих записях Python нет. Если спросят, скажи как есть: «на Python в проде не писал, читаю свободно: он близок к JavaScript, с которым я работаю каждый день. Знаю отличия — отступы, None, строгая типизация, списки и словари, GIL — и разберусь в симуляторе или тесте без проблем».</p></div>
+
+  <div class="box say"><span class="lbl">Скажи на собесе</span>
+    <p>«Python — интерпретируемый язык с динамической, но строгой типизацией и автоматическим управлением памятью. По модели он близок к JavaScript: списки и словари, функции как значения, ссылочная семантика объектов. Сам по себе он медленный, поэтому расчёты делают через numpy, где массивы лежат сплошным блоком, а операции выполняет код на C. Из-за GIL потоки не ускоряют вычисления. Его место в связке с C++ — матмодели, симуляторы и тесты, а рабочая реализация остаётся на C++.»</p></div>
+
+  <h2>Проверь себя</h2>
+  <div class="qas">
+    <details class="qa"><summary>Чем <code>/</code> отличается от <code>//</code>?</summary><p><code>/</code> всегда даёт дробный результат, <code>//</code> — целочисленное деление.</p></details>
+    <details class="qa"><summary>Что вернёт <code>bool([])</code> и чем это отличается от JS?</summary><p><code>False</code>. В Python пустые список, словарь и строка считаются ложью, а в JS пустой массив — истина.</p></details>
+    <details class="qa"><summary>Что будет при обращении к несуществующему ключу словаря?</summary><p>Исключение <code>KeyError</code>. Безопасный вариант — <code>d.get(key, default)</code>.</p></details>
+    <details class="qa"><summary>Перепиши <code>arr.filter(x =&gt; x &gt; 0).map(x =&gt; x * 2)</code> на Python.</summary><p><code>[x * 2 for x in arr if x &gt; 0]</code></p></details>
+    <details class="qa"><summary>Чем опасен <code>def f(x, items=[])</code>?</summary><p>Список по умолчанию создаётся один раз и общий для всех вызовов: он копит данные между ними.</p></details>
+    <details class="qa"><summary>Чем список отличается от кортежа?</summary><p>Список изменяемый, кортеж нет. Поэтому кортеж может быть ключом словаря.</p></details>
+    <details class="qa"><summary>Зачем нужно виртуальное окружение?</summary><p>Чтобы пакеты проекта ставились отдельно от системных и от других проектов и не конфликтовали версиями.</p></details>
+    <details class="qa"><summary>Почему numpy быстрее цикла на чистом Python?</summary><p>Данные одного типа лежат сплошным блоком, а операции над всем массивом выполняет скомпилированный код на C.</p></details>
+    <details class="qa"><summary>Что такое GIL и на что он влияет?</summary><p>Глобальная блокировка интерпретатора: байт-код выполняет один поток за раз. Потоки не ускоряют вычисления, только ожидание ввода-вывода.</p></details>
+    <details class="qa"><summary>Проверяет ли Python подсказки типов при запуске?</summary><p>Нет. Их проверяют внешние инструменты вроде mypy и редактор.</p></details>
+  </div>
+  <div class="more"><a href="https://docs.python.org/ru/3/tutorial/" target="_blank" rel="noopener">Официальный учебник Python на русском ↗</a><a href="https://numpy.org/doc/stable/user/absolute_beginners.html" target="_blank" rel="noopener">NumPy: the absolute basics for beginners (англ.) ↗</a></div>
+</section>
+
   </main>
 </div>
 <div class="scrim" id="scrim" hidden></div>
@@ -5137,7 +5362,7 @@ const TRACKS = [
   { id: 'js', title: 'Классический JavaScript', sheet: 'js', plan: ['Типы и приведение', 'Функции, область видимости, замыкания', 'this и контекст', 'Прототипы и классы', 'Асинхронность: колбэки, промисы, async/await', 'Event loop на задачах «что выведет»', 'Модули и сборка'] },
   { id: 'cs', title: 'Computer Science', sheet: 'livecoding', plan: ['Как компьютер хранит числа, текст и объекты', 'Память: стек, куча, ссылки', 'Процессы и потоки', 'Сложность алгоритмов: Big O', 'Структуры данных: массив, хэш-таблица, дерево, граф', 'Базовые алгоритмы: поиск, сортировка, обходы'] },
   { id: 'front', title: 'Фронтенд: освежить', sheet: 'react', plan: ['Как браузер рисует страницу', 'React: рендер, состояние, эффекты', 'TypeScript: система типов', 'CSS: каскад и раскладка', 'Производительность и доступность'] },
-  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt', 'Qt 5 и Qt 6, сборка и код под Windows и Linux', 'Boost и бэкенд на C++ рядом с Qt'] },
+  { id: 'cpp', title: 'C++ и Qt', sheet: 'cpp', plan: ['Память и владение: RAII, умные указатели', 'Классы, наследование, виртуальные функции', 'Конструкторы и правило пяти', 'STL и шаблоны', 'Современный C++: стандарты, auto, лямбды, optional, variant, any', 'Qt: сигналы, слоты, дерево объектов, потоки', 'Алгоритмы на C++: бинарный поиск и сортировки руками', 'Среднее, медиана и мода', 'TCP и UDP: чем отличаются и как с ними работать в Qt', 'Qt 5 и Qt 6, сборка и код под Windows и Linux', 'Boost и бэкенд на C++ рядом с Qt', 'Python для того, кто знает JavaScript'] },
 ];
 
 const KEY = 'samouchitel:v1';
