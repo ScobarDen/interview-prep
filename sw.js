@@ -1,5 +1,5 @@
 const CACHE = 'interview-prep-v1';
-const PAGES = ['./', 'index.html', 'otzubov.html', 'samouchitel.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon.svg'];
+const PAGES = ['./', 'index.html', 'otzubov.html', 'samouchitel.html', 'voprosy.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon.svg'];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {

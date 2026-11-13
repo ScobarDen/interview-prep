@@ -17,6 +17,7 @@
   ],
   "shortcuts": [
     { "name": "Самоучитель", "url": "samouchitel.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Шпаргалка", "url": "otzubov.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Шпаргалка", "url": "otzubov.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Вопросы с собеса", "url": "voprosy.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }
