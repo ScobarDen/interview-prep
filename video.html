@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#2350C8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+<title>Видео к собесу</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@500;700&display=swap">
+<style>
+:root {
+  --bg: #F2F4F8;
+  --surface: #FFFFFF;
+  --surface-2: #EBEFF5;
+  --ink: #131A25;
+  --muted: #586476;
+  --line: #D8DEE8;
+  --accent: #2350C8;
+  --accent-soft: #E2E9FA;
+  --good: #1D7448;
+  --good-soft: #DCF2E5;
+  --shadow: 0 1px 2px rgba(19, 26, 37, .06), 0 4px 14px rgba(19, 26, 37, .05);
+  --f-display: "Unbounded", "Inter", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, "Courier New", monospace;
+  --side-w: 280px;
+  --top-h: 60px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0D1219;
+    --surface: #151C26;
+    --surface-2: #1C2532;
+    --ink: #E4E9F0;
+    --muted: #96A2B3;
+    --line: #293341;
+    --accent: #84A4FF;
+    --accent-soft: #1D2944;
+    --good: #5CD39A;
+    --good-soft: #12301F;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--top-h) + 16px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.top { position: sticky; top: 0; z-index: 20; height: var(--top-h); background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-in { height: 100%; max-width: 1180px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 10px; }
+.brand { font: 700 17px var(--f-display); color: var(--ink); text-decoration: none; white-space: nowrap; }
+.brand span { color: var(--accent); }
+.icon-btn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; flex: none; }
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn:hover { border-color: var(--muted); }
+.search { flex: 1; min-width: 0; }
+.search input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: 15px var(--f-body); }
+
+.layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); gap: 28px; padding: 0 16px; }
+.side { position: sticky; top: var(--top-h); align-self: start; max-height: calc(100vh - var(--top-h)); overflow: auto; padding: 20px 0; }
+.nav-link { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
+.nav-link:hover { background: var(--surface-2); }
+.cnt { color: var(--muted); font: 500 12.5px var(--f-mono); white-space: nowrap; }
+main { padding: 24px 0 80px; min-width: 0; }
+h1 { font: 700 clamp(26px, 4.5vw, 38px)/1.15 var(--f-display); margin: 0 0 10px; }
+h1 span { color: var(--accent); }
+.lead { color: var(--muted); margin: 0 0 18px; max-width: 720px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+.chip { height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 14px var(--f-body); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.progress { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 16px 18px; margin: 18px 0 0; }
+.plan h2 { font: 700 16px var(--f-display); margin: 0 0 8px; }
+.plan ol { margin: 0; padding-left: 22px; }
+.plan li { margin: 0 0 4px; }
+.plan p { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+
+.topic h2 { font: 700 21px/1.25 var(--f-display); margin: 36px 0 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.note { color: var(--muted); margin: 0 0 12px; font-size: 15px; max-width: 760px; }
+.topic.empty, .v.hide { display: none; }
+
+.v { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px; margin: 0 0 8px; }
+.v.done { border-left-color: var(--good); }
+.v.done .v-title { color: var(--muted); }
+.v input { width: 20px; height: 20px; margin: 3px 0 0; flex: none; accent-color: var(--good); cursor: pointer; }
+.v-body { flex: 1; min-width: 0; }
+.v-title { font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.v-title:hover { text-decoration: underline; }
+.v-meta { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.v-why { margin: 4px 0 0; font-size: 14.5px; color: var(--muted); }
+.len { font: 500 12.5px var(--f-mono); }
+.tag { font: 600 11.5px var(--f-body); color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
+.tag.extra { color: var(--muted); background: var(--surface-2); }
+.none { color: var(--muted); padding: 24px 0; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; padding: 14px 0 0; display: flex; gap: 6px; overflow-x: auto; }
+  .nav-link { flex: none; border: 1px solid var(--line); background: var(--surface); padding: 5px 10px; }
+  .brand { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <a class="icon-btn" href="./" aria-label="На главную" title="На главную"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/></svg></a>
+    <a class="brand" href="#top">Видео <span>к собесу</span></a>
+    <div class="search"><input id="search" type="search" placeholder="Поиск по названию, каналу, заметке" aria-label="Поиск по видео" autocomplete="off"></div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="side" id="nav" aria-label="Разделы"></nav>
+  <main id="top">
+    <h1>Видео <span>к собесу</span></h1>
+    <p class="lead">Короткие ролики на русском по C++, Qt, алгоритмам и сетям. У каждого проверены название, канал и длина на YouTube; сами видео не отсмотрены, качество оценено по каналу и просмотрам. Теория с кодом лежит в <a href="samouchitel.html">учебнике</a>, вопросы для прогона в <a href="voprosy.html">вопросах с собеса</a>.</p>
+    <div class="bar" role="group" aria-label="Фильтр">
+      <button class="chip" type="button" data-filter="all" aria-pressed="true">Все</button>
+      <button class="chip" type="button" data-filter="core" aria-pressed="false">Основные</button>
+      <button class="chip" type="button" data-filter="todo" aria-pressed="false">Не смотрел</button>
+    </div>
+    <p class="progress" id="progress" aria-live="polite"></p>
+
+    <section class="plan" aria-labelledby="planTitle">
+      <h2 id="planTitle">В каком порядке смотреть</h2>
+      <ol>
+        <li><a href="#mock">Собеседование Junior C++</a>: сразу покажет, где дыры.</li>
+        <li><a href="#algo">Алгоритмы</a>: Big O, бинарный поиск, быстрая сортировка.</li>
+        <li><a href="#cpp">C++</a>: умные указатели, лямбды, конструктор копирования, rvalue.</li>
+        <li><a href="#net">Сети</a>: все четыре ролика, это полчаса.</li>
+        <li><a href="#qt">Qt</a>: сигналы и слоты, потом потоки.</li>
+        <li><a href="#mock">Собеседование Middle C++</a> в последний день как контрольный прогон.</li>
+      </ol>
+      <p>Железо и SOLID смотреть, если останется время. После роликов про бинарный поиск и сортировку написать код самому на бумаге: видео дают идею, а не навык.</p>
+    </section>
+
+    <div id="list"></div>
+    <p class="none" id="none" hidden>Ничего не найдено. Измени запрос или фильтр.</p>
+  </main>
+</div>
+
+<script>
+const SECTIONS = [
+  {
+    id: 'mock',
+    title: 'Живые собеседования',
+    note: 'Самое полезное в списке. Вопрос прозвучал: пауза, ответить вслух самому, потом сравнить с кандидатом и комментарием интервьюера.',
+    videos: [
+      { yt: 'a18qTcWn-II', title: 'Собеседование Junior C++', channel: 'Ambushed Raccoon', min: 45, core: true },
+      { yt: 'yfoFtu28n4o', title: 'Собеседование Middle C++', channel: 'Ambushed Raccoon', min: 52, core: true },
+      { yt: '7g8HufwNa0g', title: 'Собеседование Junior C++ (2021)', channel: 'Ambushed Raccoon', min: 50 },
+      { yt: 'OwMEK_W8Ysw', title: 'Собеседование C++', channel: 'Ambushed Raccoon', min: 47 },
+      { yt: '5enBKMwOST0', title: 'Собеседование C++. Разработчик из Яндекс', channel: 'Ambushed Raccoon', min: 53 },
+      { yt: 'eX6j_55VeRM', title: 'C++ Вопросы на собеседовании. Разбор', channel: 'Ambushed Raccoon', min: 85, why: 'Разбор вопросов без кандидата.' },
+      { yt: 'ViHNB0_1j90', title: 'Собеседования. Вопросы. C++', channel: 'Ambushed Raccoon', min: 67, why: 'Разбор вопросов без кандидата.' },
+    ],
+  },
+  {
+    id: 'algo',
+    title: 'Алгоритмы и структуры данных',
+    note: 'Сортировка слиянием показана на Python, хеш-таблицы объясняет автор, который пишет на Go. Идея от языка не зависит, код на C++ есть в учебнике.',
+    videos: [
+      { yt: 'BlwiPA9rx8w', title: 'Big O, сложность алгоритмов, поиск и сортировка массивов', channel: 'Ilya Krukowski', min: 37, core: true },
+      { yt: 'vUAva-FIPzk', title: 'Бинарный поиск: объяснение и разбор LeetCode 704', channel: 'Леонид Мурзинов', min: 14, core: true, why: 'Канал маленький, взят за разбор конкретной задачи.' },
+      { yt: 'M6iMFWxExAU', title: 'Быстрая сортировка: простое объяснение и реализация', channel: 'WolfCode', min: 9, core: true },
+      { yt: 'SnzZ61aCVxc', title: 'Сортировка слиянием (merge sort)', channel: 'selfedu', min: 13, core: true },
+      { yt: '0UX4MIfOMEs', title: 'Хэш-таблицы за 10 минут', channel: 'Николай Тузов', min: 13, core: true },
+      { yt: 'qAgoFGUYSac', title: 'Топ структур данных, которые должен знать программист', channel: 'Winderton', min: 7, core: true },
+      { yt: '3BwJPw4iluM', title: 'Стек и очередь: реализация и использование', channel: 'Ilya Krukowski', min: 24 },
+    ],
+  },
+  {
+    id: 'cpp',
+    title: 'C++',
+    note: 'Ролики OnlyLogic Games сняты в 2016 году и покрывают C++11/14. Про optional, any и остальное из C++17/20 коротких видео на русском не нашлось, это в главе «Современный C++» учебника.',
+    videos: [
+      { yt: 'S3_RqYSQa-s', title: 'Память: стек и куча', channel: 'OnlyLogic Games', min: 12, core: true },
+      { yt: '3x9nd6Tm7Pc', title: 'Конструктор копирования', channel: '#SimpleCode', min: 31, core: true, why: 'Рассчитан на новичков, можно смотреть на скорости 1.5.' },
+      { yt: 'ijJ4wuBg1NQ', title: 'Умные указатели', channel: 'OnlyLogic Games', min: 20, core: true },
+      { yt: '5AbTHsZl7LY', title: 'rvalue и lvalue ссылки, идеальная передача', channel: 'OnlyLogic Games', min: 11, core: true },
+      { yt: 'F1V6CvwJGkw', title: 'Лямбда-выражения', channel: 'OnlyLogic Games', min: 20, core: true },
+      { yt: 'VuH9fw9tznE', title: 'Чисто виртуальные функции и абстрактные классы', channel: 'OnlyLogic Games', min: 10, core: true },
+      { yt: 'Na9xiSv-BxY', title: 'Таблица виртуальных методов (vtable)', channel: 'Volodya Mozhenkov', min: 15, core: true },
+      { yt: 'XnC_qsNh5KI', title: 'Map, multimap, unordered_map', channel: 'OnlyLogic Games', min: 11, core: true },
+      { yt: 'gO6ck1CuuDE', title: 'Mutex: синхронизация потоков', channel: 'OnlyLogic Games', min: 11, core: true },
+      { yt: 'ixsTu-ULh0Q', title: 'Умные указатели, урок 130', channel: '#SimpleCode', min: 24, why: 'Альтернатива ролику OnlyLogic Games.' },
+      { yt: 'XDuSaRGeIx4', title: 'lock_guard и mutex', channel: '#SimpleCode', min: 12 },
+      { yt: 'ogj3JI57BLM', title: 'Внутреннее устройство shared_ptr, weak_ptr', channel: 'Лекторий ФПМИ', min: 100, why: 'Лекция МФТИ, для глубокого погружения.' },
+      { yt: 't01WstkaK4k', title: 'Лямбда-функции', channel: 'Лекторий ФПМИ', min: 85, why: 'Лекция МФТИ, для глубокого погружения.' },
+    ],
+  },
+  {
+    id: 'net',
+    title: 'Сети',
+    note: 'Курс Созыкина считается стандартом по сетям на русском. Ролики короткие, по одной теме на видео.',
+    videos: [
+      { yt: 'UZo4ffQ-aAc', title: 'Модель и стек протоколов TCP/IP', channel: 'Andrey Sozykin', min: 6, core: true },
+      { yt: '_vAjHdh92YU', title: 'Интерфейс сокетов', channel: 'Andrey Sozykin', min: 8, core: true },
+      { yt: 'ju3_xfbhxy0', title: 'Протокол TCP: установка соединения', channel: 'Andrey Sozykin', min: 10, core: true },
+      { yt: 'C4Y8BdTN9jA', title: 'Протокол UDP в Wireshark', channel: 'Andrey Sozykin', min: 6, core: true },
+      { yt: 'MnwPIwucFLs', title: 'Протокол TCP: управление потоком', channel: 'Andrey Sozykin', min: 6 },
+      { yt: 'TumJJ0LeROs', title: 'Протокол TCP: скользящее окно', channel: 'Andrey Sozykin', min: 8 },
+    ],
+  },
+  {
+    id: 'qt',
+    title: 'Qt',
+    note: 'С Qt на русском хуже всего: каналы мелкие, ролики 2015–2020 годов. Короткого видео про Model/View не нашлось, эта тема в главе «Qt на практике» учебника.',
+    videos: [
+      { yt: 'Ft4JyjIBpg4', title: 'Основы программирования на Qt. Сигналы и слоты', channel: 'Industrial Software Engineering Online', min: 30, core: true },
+      { yt: '9g2G8IE58S0', title: 'Сигналы и слоты в Qt 5.14', channel: 'Vadim Kiselev', min: 7, core: true },
+      { yt: 'ez0_PjTb8Zk', title: 'Многопоточность, часть 1 (QThread)', channel: 'Лев Алексеевский', min: 18, core: true },
+      { yt: 'rPa5zieGd-o', title: 'QThread: работа с потоками через moveToThread', channel: 'EVILEG', min: 22, core: true },
+      { yt: 'XwS_LBHmvzU', title: 'Многопоточность, часть 2 (QThread::run)', channel: 'Лев Алексеевский', min: 16 },
+    ],
+  },
+  {
+    id: 'hw',
+    title: 'Как работает железо',
+    note: 'У Alek OS по 300–750 тысяч просмотров на ролик. Ролик про стек объясняет фреймы функций и переполнение стека, это основа для разговора про стек и кучу в C++.',
+    videos: [
+      { yt: 'Wh22_O8jXVQ', title: 'Как работает память компьютера', channel: 'Alek OS', min: 19, core: true },
+      { yt: 'MXoMuymbfo8', title: 'Как работает стек', channel: 'Alek OS', min: 15, core: true },
+      { yt: '7n_8cOBpQrg', title: 'Как работает кэш процессора', channel: 'Alek OS', min: 33, why: 'Пригодится для вопроса, почему vector быстрее list.' },
+    ],
+  },
+  {
+    id: 'solid',
+    title: 'SOLID',
+    note: '',
+    videos: [
+      { yt: 'FDwVLPZO5LQ', title: 'Что такое SOLID? Простыми словами о принципах ООП', channel: 'Night Train Code', min: 14, core: true },
+      { yt: 'TxZwqVTaCmA', title: 'SOLID принципы простым языком', channel: 'Ulbi TV', min: 45, why: 'Подробнее, примеры на JS.' },
+    ],
+  },
+];
+
+const KEY = 'video:v1';
+let seen = {};
+try { seen = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(seen)); } catch (e) {} };
+
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (min) => (min >= 60 ? `${Math.floor(min / 60)} ч ${min % 60} мин` : `${min} мин`);
+const sum = (videos) => videos.reduce((total, v) => total + (v.min || 0), 0);
+
+document.getElementById('nav').innerHTML = SECTIONS.map((s) => {
+  const core = s.videos.filter((v) => v.core);
+  return `<a class="nav-link" href="#${s.id}"><span>${esc(s.title)}</span><span class="cnt">${fmt(sum(core))}</span></a>`;
+}).join('');
+
+document.getElementById('list').innerHTML = SECTIONS.map((s) => {
+  const core = s.videos.filter((v) => v.core);
+  const rows = s.videos.map((v) => `
+    <div class="v" data-id="${v.yt}"${v.core ? ' data-core="1"' : ''}>
+      <input type="checkbox" id="c-${v.yt}" aria-label="Посмотрел: ${esc(v.title)}">
+      <div class="v-body">
+        <a class="v-title" href="https://www.youtube.com/watch?v=${v.yt}" target="_blank" rel="noopener">${esc(v.title)}</a>
+        <div class="v-meta">
+          <span>${esc(v.channel)}</span>
+          ${v.min ? `<span class="len">${fmt(v.min)}</span>` : ''}
+          <span class="tag${v.core ? '' : ' extra'}">${v.core ? 'основное' : 'дополнительно'}</span>
+        </div>
+        ${v.why ? `<p class="v-why">${esc(v.why)}</p>` : ''}
+      </div>
+    </div>`).join('');
+  return `
+    <section class="topic" id="${s.id}">
+      <h2>${esc(s.title)} <span class="cnt">основное: ${fmt(sum(core))}</span></h2>
+      ${s.note ? `<p class="note">${esc(s.note)}</p>` : ''}
+      ${rows}
+    </section>`;
+}).join('');
+
+const items = [...document.querySelectorAll('.v')];
+const topics = [...document.querySelectorAll('section.topic')];
+const search = document.getElementById('search');
+const progress = document.getElementById('progress');
+const none = document.getElementById('none');
+const all = SECTIONS.flatMap((s) => s.videos);
+const coreVideos = all.filter((v) => v.core);
+let filter = 'all';
+
+function paint(el) {
+  const done = Boolean(seen[el.dataset.id]);
+  el.classList.toggle('done', done);
+  el.querySelector('input').checked = done;
+}
+
+function apply() {
+  const query = search.value.trim().toLowerCase();
+  let shown = 0;
+  items.forEach((el) => {
+    const ok = !(filter === 'core' && !el.dataset.core)
+      && !(filter === 'todo' && seen[el.dataset.id])
+      && (!query || el.textContent.toLowerCase().includes(query));
+    el.classList.toggle('hide', !ok);
+    if (ok) shown += 1;
+  });
+  topics.forEach((t) => t.classList.toggle('empty', !t.querySelector('.v:not(.hide)')));
+  none.hidden = shown > 0;
+  const coreDone = coreVideos.filter((v) => seen[v.yt]);
+  const left = sum(coreVideos) - sum(coreDone);
+  progress.textContent = `Основных посмотрено: ${coreDone.length} из ${coreVideos.length} · осталось ${fmt(left)} · всего роликов: ${all.length}`;
+}
+
+document.addEventListener('change', (event) => {
+  const box = event.target.closest('.v input');
+  if (!box) return;
+  const el = box.closest('.v');
+  if (box.checked) seen[el.dataset.id] = 1; else delete seen[el.dataset.id];
+  save();
+  paint(el);
+  apply();
+});
+
+document.addEventListener('click', (event) => {
+  const chip = event.target.closest('[data-filter]');
+  if (!chip) return;
+  filter = chip.dataset.filter;
+  document.querySelectorAll('[data-filter]').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+  apply();
+});
+
+search.addEventListener('input', apply);
+items.forEach(paint);
+apply();
+</script>
